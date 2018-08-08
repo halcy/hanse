@@ -31,7 +31,7 @@ class AnsiGraphics:
         Fonts are files with a sequence of bits specifying 8x16 characters.
         """
         # Read the font
-        f = open("vga.fnt", "rb")
+        f = open(font_file, "rb")
         in_bits = []
         try:
             byte = f.read(1)
