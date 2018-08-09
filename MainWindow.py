@@ -54,6 +54,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExit = QtWidgets.QAction("Exit", self)
         
         menuEdit = self.menuBar().addMenu("Edit")
+        self.actionSize = QtWidgets.QAction("Set size", self)
         self.actionUndo = QtWidgets.QAction("Undo", self)
         self.actionRedo = QtWidgets.QAction("Redo", self)
         self.actionCopy = QtWidgets.QAction("Copy", self)
@@ -68,6 +69,8 @@ class MainWindow(QtWidgets.QMainWindow):
         menuFile.addSeparator()
         menuFile.addAction(self.actionExit)
         
+        menuEdit.addAction(self.actionSize)
+        menuEdit.addSeparator()
         menuEdit.addAction(self.actionUndo)
         menuEdit.addAction(self.actionRedo)
         menuEdit.addSeparator()
@@ -150,6 +153,8 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.actionExit.triggered.connect(self.exit)
         self.actionExit.setShortcut(QtGui.QKeySequence.Quit)
+        
+        self.actionSize.triggered.connect(self.resizeCanvas)
         
         self.actionUndo.triggered.connect(self.undo)
         self.actionUndo.setShortcut(QtGui.QKeySequence.Undo)
@@ -414,6 +419,18 @@ class MainWindow(QtWidgets.QMainWindow):
             self.addUndo(self.ansiImage.paste(self.pasteBuffer))
             self.redisplayAnsi()
     
+    def resizeCanvas(self):
+        """
+        Get size via dialog and resize
+        """
+        cur_width, cur_height =  self.ansiImage.get_size()
+        sizeDialog = SizeDialog(cur_width, cur_height)
+        if sizeDialog.exec() == 1:
+            new_width = sizeDialog.spinBoxWidth.value()
+            new_height = sizeDialog.spinBoxHeight.value()
+            self.ansiImage.change_size(new_width, new_height)
+            self.redisplayAnsi()
+            
     def addUndo(self, operation):
         """
         Add an undo step (and clean out the redo stack)

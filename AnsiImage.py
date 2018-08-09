@@ -37,7 +37,13 @@ class AnsiImage:
             for x in [0, 1, 6, 7]:
                 self.cursor_shape.append((y, x))
     
-    def change_size(self, new_height, new_width):
+    def get_size(self):
+        """
+        Return the current canvas size in characters
+        """
+        return (self.width, self.height)
+    
+    def change_size(self, new_width, new_height):
         """
         Make the image larger or smaller, retaining contents
         """
