@@ -155,7 +155,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionUndo.setShortcut(QtGui.QKeySequence.Undo)
         
         self.actionRedo.triggered.connect(self.redo)
-        self.actionRedo.setShortcut(QtGui.QKeySequence.Redo)
+        self.actionRedo.setShortcuts([QtGui.QKeySequence.Redo, QtGui.QKeySequence("Ctrl+Y")])
         
         self.actionCopy.triggered.connect(self.clipboardCopy)
         self.actionCopy.setShortcut(QtGui.QKeySequence.Copy)
@@ -289,31 +289,38 @@ class MainWindow(QtWidgets.QMainWindow):
             
         if event.key() == QtCore.Qt.Key_Return:
             char = self.palette.get_char()
-            self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
+            self.addUndo(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
             if not self.ansiImage.move_cursor(1, 0):
                 self.ansiImage.move_cursor(x = 0, relative = False)
                 self.ansiImage.move_cursor(y = 1)
             handled = True
-        
-        # TODO: "Smart" home/end
+    
         if event.key() == QtCore.Qt.Key_Home:
-            self.ansiImage.move_cursor(x = 0, relative = False)
+            line_end = self.ansiImage.get_line_end()
+            if self.ansiImage.get_cursor()[0] > line_end + 1:
+                self.ansiImage.move_cursor(x = line_end + 1, relative = False)
+            else:
+                self.ansiImage.move_cursor(x = 0, relative = False)
             handled = True
             
         if event.key() == QtCore.Qt.Key_End:
-            self.ansiImage.move_cursor(x = 10000000, relative = False)
+            line_end = self.ansiImage.get_line_end()
+            if self.ansiImage.get_cursor()[0] < line_end + 1:
+                self.ansiImage.move_cursor(x = line_end + 1, relative = False)
+            else:
+                self.ansiImage.move_cursor(x = 10000000, relative = False)
             handled = True
         
         if event.key() == QtCore.Qt.Key_Backspace:
             if self.ansiImage.move_cursor(-1, 0):
-                self.undoStack.append(self.ansiImage.set_cell(char = ord(' ')))
+                self.addUndo(self.ansiImage.set_cell(char = ord(' ')))
             handled = True
         
         # Theoretically this could break, practically it should be fine.
         if event.key() >= QtCore.Qt.Key_F1 and event.key() <= QtCore.Qt.Key_F12:
             pal_idx = event.key() - QtCore.Qt.Key_F1
             char = self.palette.get_char(pal_idx, True)
-            self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
+            self.addUndo(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
             self.ansiImage.move_cursor(1, 0)
             handled = True
         
@@ -321,7 +328,7 @@ class MainWindow(QtWidgets.QMainWindow):
             char = self.palette.get_char()
             char[0] = ord(event.text())
             if char[0] <= 255:
-                self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
+                self.addUndo(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
                 self.ansiImage.move_cursor(1, 0)
             handled = True
             
@@ -404,9 +411,16 @@ class MainWindow(QtWidgets.QMainWindow):
         Paste at cursor
         """
         if self.pasteBuffer != None:
-            self.undoStack.append(self.ansiImage.paste(self.pasteBuffer))
+            self.addUndo(self.ansiImage.paste(self.pasteBuffer))
             self.redisplayAnsi()
-            
+    
+    def addUndo(self, operation):
+        """
+        Add an undo step (and clean out the redo stack)
+        """
+        self.undoStack.append(operation)
+        self.redoStack = []
+        
     def undo(self):
         """
         Undo last action

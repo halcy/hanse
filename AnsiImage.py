@@ -57,13 +57,19 @@ class AnsiImage:
             return False
         return True
     
-    def set_selection(self, new_selection = None, append = False, remove = False, preliminary = False):
+    def set_selection(self, new_selection_initial = None, append = False, remove = False, preliminary = False):
         """
         Sets the selection list
         """
         self.selection_preliminary = set()
         self.selection_preliminary_remove = set()
-        if new_selection != None:
+        if new_selection_initial != None:
+            new_selection = []
+            for entry in new_selection_initial:
+                if entry[0] < 0 or entry[0] >= self.width or entry[1] < 0 or entry[1] >= self.height:
+                    continue
+                new_selection.append(entry)
+                
             new_selection = copy.deepcopy(new_selection)
             if append == False or self.selection == None:
                 self.selection = set()
@@ -200,6 +206,33 @@ class AnsiImage:
         
         self.is_dirty = True
         return copy.deepcopy([prev_val])
+    
+    def get_cell(self, x = None, y = None):
+        """
+        Return value in given cell (or under cursor, by default)
+        """
+        if x == None:
+            x = self.cursor_x
+        if y == None:
+            y = self.cursor_y
+        return self.ansi_image[y][x]
+    
+    def get_cursor(self):
+        """
+        Return cursor x, y
+        """
+        return (self.cursor_x, self.cursor_y)
+    
+    def get_line_end(self, y = None):
+        """
+        Find x coordinate of the "line ending". -1 if empty
+        """
+        if y == None:
+            y = self.cursor_y
+        for x in range(self.width - 1, -1, -1):
+            if self.ansi_image[y][x][0] != ord(' '):
+                return x
+        return -1
     
     def dirty(self, keep = True):
         """
