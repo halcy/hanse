@@ -7,6 +7,8 @@ from AnsiGraphics import AnsiGraphics
 from AnsiImage import AnsiImage
 from AnsiPalette import AnsiPalette
 
+from SizeDialog import SizeDialog
+
 class MainWindow(QtWidgets.QMainWindow):
     """
     Halcys Ansi Editor
@@ -29,9 +31,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ansiGraphics = AnsiGraphics("fonts/vga.fnt")
         
         # Set up image
-        self.ansiImage = AnsiImage()
-        self.ansiImage.clear_image(80, 24)
-        self.redisplayAnsi()
+        self.newFile()
         
         # Set up palette
         self.palette = AnsiPalette(self.ansiGraphics)
@@ -54,6 +54,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionExit = QtWidgets.QAction("Exit", self)
         
         menuEdit = self.menuBar().addMenu("Edit")
+        self.actionUndo = QtWidgets.QAction("Undo", self)
+        self.actionRedo = QtWidgets.QAction("Redo", self)
         self.actionCopy = QtWidgets.QAction("Copy", self)
         self.actionPaste = QtWidgets.QAction("Paste", self)
         
@@ -66,6 +68,9 @@ class MainWindow(QtWidgets.QMainWindow):
         menuFile.addSeparator()
         menuFile.addAction(self.actionExit)
         
+        menuEdit.addAction(self.actionUndo)
+        menuEdit.addAction(self.actionRedo)
+        menuEdit.addSeparator()
         menuEdit.addAction(self.actionCopy)
         menuEdit.addAction(self.actionPaste)
         
@@ -136,27 +141,34 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         self.actionNew.triggered.connect(self.newFile)
         self.actionOpen.triggered.connect(self.openFile)
-        self.actionOpen.setShortcut(QtGui.QKeySequence("Ctrl+O"))
+        self.actionOpen.setShortcut(QtGui.QKeySequence.Open)
         
         self.actionSave.triggered.connect(self.saveFile)
-        self.actionSave.setShortcut(QtGui.QKeySequence("Ctrl+S"))
+        self.actionSave.setShortcut(QtGui.QKeySequence.Save)
         self.actionSaveAs.triggered.connect(self.saveFileAs)
         self.actionExport.triggered.connect(self.exportPNG)
         
         self.actionExit.triggered.connect(self.exit)
-        self.actionExit.setShortcut(QtGui.QKeySequence("Ctrl+Q"))
+        self.actionExit.setShortcut(QtGui.QKeySequence.Quit)
+        
+        self.actionUndo.triggered.connect(self.undo)
+        self.actionUndo.setShortcut(QtGui.QKeySequence.Undo)
+        
+        self.actionRedo.triggered.connect(self.redo)
+        self.actionRedo.setShortcut(QtGui.QKeySequence.Redo)
         
         self.actionCopy.triggered.connect(self.clipboardCopy)
-        self.actionCopy.setShortcut(QtGui.QKeySequence("Ctrl+C"))
+        self.actionCopy.setShortcut(QtGui.QKeySequence.Copy)
         
         self.actionPaste.triggered.connect(self.clipboardPaste)
-        self.actionPaste.setShortcut(QtGui.QKeySequence("Ctrl+v"))
+        self.actionPaste.setShortcut(QtGui.QKeySequence.Paste)
         
         self.imageScroll.keyPressEvent = self.keyPressEvent # For catching arrow keys globally
         self.charSel.mousePressEvent = self.charSelMousePress
         self.palSel.mousePressEvent = self.palSelMousePress
         self.imageView.mousePressEvent = self.imageMousePress
-        self.imageView.mouseReleaseEvent = self.imageMouseRelease
+        self.imageView.mouseMoveEvent = self.imageMouseMoveRelease
+        self.imageView.mouseReleaseEvent = self.imageMouseMoveRelease
         
     def charSelMousePress(self, event):
         """
@@ -188,10 +200,15 @@ class MainWindow(QtWidgets.QMainWindow):
             self.selStartX = event.x() // 8
             self.selStartY = event.y() // 16
             self.ansiImage.move_cursor(self.selStartX, self.selStartY, False)
+            if event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier:
+                if event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier:
+                    self.ansiImage.set_selection([(self.selStartX, self.selStartY)], append = True, remove = True)
+                else:
+                    self.ansiImage.set_selection([(self.selStartX, self.selStartY)], append = True, remove = False)
             self.redisplayAnsi()
             
-    def imageMouseRelease(self, event):
-        if event.button() == QtCore.Qt.LeftButton:
+    def imageMouseMoveRelease(self, event):
+        if event.buttons() == QtCore.Qt.LeftButton or event.button() == QtCore.Qt.LeftButton:
             selEndX = event.x() // 8
             selEndY = event.y() // 16
             
@@ -209,9 +226,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 for x in range(self.selStartX, selEndX + 1, selDirX):
                     for y in range(self.selStartY, selEndY + 1, selDirY):
                         selection.append((x, y))
-                self.ansiImage.set_selection(selection)
+                preliminary = not (event.button() == QtCore.Qt.LeftButton)
+                append = (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier)
+                remove = (event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier)
+                self.ansiImage.set_selection(selection, append = append, remove = remove, preliminary = preliminary)
+                        
             else:
-                self.ansiImage.set_selection()
+                if not event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier:
+                    self.ansiImage.set_selection()
             self.redisplayAnsi()
         
     def redisplayAnsi(self):
@@ -267,7 +289,7 @@ class MainWindow(QtWidgets.QMainWindow):
             
         if event.key() == QtCore.Qt.Key_Return:
             char = self.palette.get_char()
-            self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2])
+            self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
             if not self.ansiImage.move_cursor(1, 0):
                 self.ansiImage.move_cursor(x = 0, relative = False)
                 self.ansiImage.move_cursor(y = 1)
@@ -284,14 +306,14 @@ class MainWindow(QtWidgets.QMainWindow):
         
         if event.key() == QtCore.Qt.Key_Backspace:
             if self.ansiImage.move_cursor(-1, 0):
-                self.ansiImage.set_cell(char = ord(' '))
+                self.undoStack.append(self.ansiImage.set_cell(char = ord(' ')))
             handled = True
         
         # Theoretically this could break, practically it should be fine.
         if event.key() >= QtCore.Qt.Key_F1 and event.key() <= QtCore.Qt.Key_F12:
             pal_idx = event.key() - QtCore.Qt.Key_F1
             char = self.palette.get_char(pal_idx, True)
-            self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2])
+            self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
             self.ansiImage.move_cursor(1, 0)
             handled = True
         
@@ -299,7 +321,7 @@ class MainWindow(QtWidgets.QMainWindow):
             char = self.palette.get_char()
             char[0] = ord(event.text())
             if char[0] <= 255:
-                self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2])
+                self.undoStack.append(self.ansiImage.set_cell(char = char[0], fore = char[1], back = char[2]))
                 self.ansiImage.move_cursor(1, 0)
             handled = True
             
@@ -324,6 +346,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         self.ansiImage = AnsiImage()
         self.ansiImage.clear_image(80, 24)
+        self.undoStack = []
+        self.redoStack = []
         self.currentFileName = None
         self.redisplayAnsi()
         self.updateTitle()
@@ -380,6 +404,23 @@ class MainWindow(QtWidgets.QMainWindow):
         Paste at cursor
         """
         if self.pasteBuffer != None:
-            self.ansiImage.paste(self.pasteBuffer)
+            self.undoStack.append(self.ansiImage.paste(self.pasteBuffer))
             self.redisplayAnsi()
             
+    def undo(self):
+        """
+        Undo last action
+        """
+        if len(self.undoStack) != 0:
+            undoAction = self.undoStack.pop()
+            self.redoStack.append(self.ansiImage.paste(undoAction, x = 0, y = 0))
+            self.redisplayAnsi()
+            
+    def redo(self):
+        """
+        Undo last undo
+        """
+        if len(self.redoStack) != 0:
+            redoAction = self.redoStack.pop()
+            self.undoStack.append(self.ansiImage.paste(redoAction, x = 0, y = 0))
+            self.redisplayAnsi()

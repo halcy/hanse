@@ -23,8 +23,12 @@ class AnsiImage:
         self.cursor_y = 0
         self.is_dirty = False
         
+        # Selection related stuff
         self.selection = None
+        self.selection_preliminary = set()
+        self.selection_preliminary_remove = set()
         
+        # The cursor
         self.cursor_shape = []
         for y in [0, 1, 14, 15]:
             for x in range(0, 8):
@@ -33,17 +37,58 @@ class AnsiImage:
             for x in [0, 1, 6, 7]:
                 self.cursor_shape.append((y, x))
     
-    def set_selection(self, new_selection = None):
+    def change_size(self, new_height, new_width):
+        """
+        Make the image larger or smaller, retaining contents
+        """
+        copy_width = min(self.width, new_width)
+        copy_height = min(self.height, new_height)
+        old_image = copy.deepcopy(self.ansi_image)
+        self.clear_image(new_width, new_height)
+        for y in range(copy_height):
+            for x in range(copy_width):
+               self.ansi_image[y][x] = old_image[y][x]
+               
+    def has_selection(self):
+        """
+        True if a selection exists, False if no
+        """
+        if self.selection == None or len(self.selection) == 0:
+            return False
+        return True
+    
+    def set_selection(self, new_selection = None, append = False, remove = False, preliminary = False):
         """
         Sets the selection list
         """
-        self.selection = copy.deepcopy(new_selection)
-        
-    def get_selected(self):
+        self.selection_preliminary = set()
+        self.selection_preliminary_remove = set()
+        if new_selection != None:
+            new_selection = copy.deepcopy(new_selection)
+            if append == False or self.selection == None:
+                self.selection = set()
+            if preliminary == False:
+                for sel_element in new_selection:
+                    if remove == True and sel_element in self.selection:
+                        self.selection.remove(sel_element)
+                    else:
+                        if remove == False:
+                            self.selection.add(sel_element)
+            else:
+                for sel_element in new_selection:
+                    if remove == True:
+                        self.selection_preliminary_remove.add(sel_element)
+                    else:
+                        self.selection_preliminary.add(sel_element)
+        else:
+            self.selection = None
+            
+    def get_selected(self, selection = None):
         """
         Returns the selected characters, offset-augmnented
         """
-        selection = self.selection
+        if selection == None:
+            selection = self.selection
         if selection == None or len(selection) == 0:
             selection = [(self.cursor_x, self.cursor_y)]
             
@@ -64,6 +109,8 @@ class AnsiImage:
     def paste(self, paste_object, x = None, y = None):
         """
         Pastes at given or (default) cursor position
+        
+        Returns what was there before
         """
         if x == None:
             x = self.cursor_x
@@ -71,13 +118,20 @@ class AnsiImage:
         if y == None:
             y = self.cursor_y
             
+        inverse = []
         for (x_off, y_off, char) in paste_object:
             char_x = x + x_off
             char_y = y + y_off
             if char_x >= self.width or char_y >= self.height:
                 continue
-            self.ansi_image[char_y][char_x] = copy.deepcopy(char)
-            
+            inverse.append([char_x, char_y, [None, None, None]])
+            for num, value in enumerate(char):
+                if value != None:
+                    inverse[-1][2][num] = self.ansi_image[char_y][char_x][num]
+                    self.ansi_image[char_y][char_x][num] = value
+        self.is_dirty = True
+        return inverse
+    
     def generate_ansi_char(self, in_char, fg_bright, bg_bright, fg, bg):
         """
         Generate ansi char as array: char idx, fg pal idx, bg pal idx
@@ -122,22 +176,30 @@ class AnsiImage:
         """
         Sets the values of a character cell to the given values. Only replaces 
         values given. Uses cursor position if no position is given.
+        
+        Returns the set cells previous value, position-augmented and as list for convenience
         """
         if x == None:
             x = self.cursor_x
         if y == None:
             y = self.cursor_y
-            
+        
+        prev_val = [x, y, [None, None, None]]
+        
         if char != None:
+            prev_val[2][0] = self.ansi_image[y][x][0]
             self.ansi_image[y][x][0] = char
         
         if fore != None:
+            prev_val[2][1] = self.ansi_image[y][x][1]
             self.ansi_image[y][x][1] = fore
             
         if back != None:
+            prev_val[2][2] = self.ansi_image[y][x][2]
             self.ansi_image[y][x][2] = back
         
         self.is_dirty = True
+        return copy.deepcopy([prev_val])
     
     def dirty(self, keep = True):
         """
@@ -335,8 +397,13 @@ class AnsiImage:
                         ansi_bitmap[AnsiImage.CHAR_SIZE_Y * y + cursor_pix_y, AnsiImage.CHAR_SIZE_X * x + cursor_pix_x, 3] = 1.0
         
         # Invert selection
+        full_selection = self.selection_preliminary
         if self.selection != None:
-            for x, y in self.selection:
+            full_selection = full_selection.union(self.selection)
+        full_selection = full_selection.difference(self.selection_preliminary_remove)
+        
+        if len(full_selection) != 0:
+            for x, y in full_selection:
                 ansi_bitmap[
                     AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
                     AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
