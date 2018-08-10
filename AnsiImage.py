@@ -190,7 +190,43 @@ class AnsiImage:
             for i in range(-how_much):
                 new_line.append(copy.deepcopy(fill_char))
             self.ansi_image[y] = new_line[:self.width]
+    
+    def shift_column(self, y = None, x = None, how_much = 1, fill_char = None):
+        """
+        Same, but columns
+        """
+        if x == None:
+            x = self.cursor_x
+        
+        if y == None:
+            y = self.cursor_y
+        
+        # Swap and transpose
+        tmp = x
+        x = y
+        y = tmp
+        image_transposed = list(map(list, zip(*self.ansi_image)))
+        
+        # Now, the code is nearly the same as row shift
+        if fill_char == None:
+            fill_char = self.generate_ansi_char(' ', False, False, 0, 0)
             
+        if how_much > 0:
+            new_line = image_transposed[y][:x]
+            for i in range(how_much):
+                new_line.append(copy.deepcopy(fill_char))
+            new_line += image_transposed[y][x:]
+            image_transposed[y] = new_line[:self.height]
+        
+        if how_much < 0:
+            new_line = image_transposed[y][:x]
+            new_line += image_transposed[y][x - how_much:]
+            for i in range(-how_much):
+                new_line.append(copy.deepcopy(fill_char))
+            image_transposed[y] = new_line[:self.height]
+        
+        self.ansi_image = list(map(list, zip(*image_transposed)))
+        
     def generate_ansi_char(self, in_char, fg_bright, bg_bright, fg, bg, raw = False):
         """
         Generate ansi char as array: char idx, fg pal idx, bg pal idx
@@ -391,6 +427,9 @@ class AnsiImage:
                 continue
                 
             # End of line
+            if ansi_bytes[char_idx] == 13:
+                char_idx += 1
+                continue
             if ansi_bytes[char_idx] == 10:
                 ansi_lines.append(ansi_line)
                 ansi_line = []

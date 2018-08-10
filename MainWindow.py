@@ -436,14 +436,36 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Ins and Del
         if event.key() == QtCore.Qt.Key_Insert:
-            self.ansiImage.shift_line()
+            if (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier):
+                if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                    for col in range(self.ansiImage.get_size()[0]):
+                        self.ansiImage.shift_column(x = col)
+                else:
+                    self.ansiImage.shift_column()
+            else:
+                if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                    for line in range(self.ansiImage.get_size()[1]):
+                        self.ansiImage.shift_line(y = line)
+                else:
+                    self.ansiImage.shift_line()
             handled = True
             
         if event.key() == QtCore.Qt.Key_Delete:
             if self.ansiImage.has_selection():
                 self.ansiImage.fill_selection()
             else:
-                self.ansiImage.shift_line(how_much = -1)
+                if (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier):
+                    if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                        for col in range(self.ansiImage.get_size()[0]):
+                            self.ansiImage.shift_column(x = col, how_much = -1)
+                    else:
+                        self.ansiImage.shift_column(how_much = -1)
+                else:
+                    if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                        for line in range(self.ansiImage.get_size()[1]):
+                            self.ansiImage.shift_line(y = line, how_much = -1)
+                    else:
+                        self.ansiImage.shift_line(how_much = -1)
             handled = True
             
         # Backspace delete
