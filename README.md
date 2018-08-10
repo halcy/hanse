@@ -12,6 +12,7 @@ Basic controls:
   * Use mouse or shift+arrow keys to select areas
     * Hold ctrl while selecting to add to exising selection - selections can be nonsquare
     * Hold ctrl+alt to subtract from selection
+    * single click without drag deletes selection
   * ctrl+c copies, ctrl-x cuts, ctrl-v pastes (only internally, not proper clipboard)
   * home/end work as "smart home/end" in editors usually does
   * del/ins delete / insert after the cursor
