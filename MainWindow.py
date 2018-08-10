@@ -523,7 +523,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Create blank 80x24 document
         """
         self.ansiImage = AnsiImage()
-        self.ansiImage.clear_image(80, 256)
+        self.ansiImage.clear_image(80, 24)
             
         self.undoStack = []
         self.redoStack = []
