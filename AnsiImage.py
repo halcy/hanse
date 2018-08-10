@@ -191,7 +191,7 @@ class AnsiImage:
                 new_line.append(copy.deepcopy(fill_char))
             self.ansi_image[y] = new_line[:self.width]
             
-    def generate_ansi_char(self, in_char, fg_bright, bg_bright, fg, bg):
+    def generate_ansi_char(self, in_char, fg_bright, bg_bright, fg, bg, raw = False):
         """
         Generate ansi char as array: char idx, fg pal idx, bg pal idx
         """
@@ -199,7 +199,10 @@ class AnsiImage:
             fg += 8
         if bg_bright:
             bg += 8
-        return [ord(in_char), fg, bg]
+        if raw == False:
+            return [ord(in_char), fg, bg]
+        else:
+            return [in_char, fg, bg]
     
     def move_cursor(self, x = None, y = None, relative = True):
         """
@@ -314,17 +317,18 @@ class AnsiImage:
                 line.append(self.generate_ansi_char(' ', False, False, 0, 0))
             self.ansi_image.append(line)
     
-    def load_ans(self, ansi_path):
+    def load_ans(self, ansi_path, wide_mode = False):
         """
         Loads and parses and ansi file. Documentation of parse_ans applies.
-        Additionally assumes data is encoded as cp1252.
+        
+        wide_mode makes it so the parser doesn't insert line breaks at 80 characters.
         """
-        with open(ansi_path, "r", encoding='cp1252') as f:
+        with open(ansi_path, "rb") as f:
             ansi_data = f.read()
-        self.parse_ans(ansi_data)
+        self.parse_ans(ansi_data, wide_mode)
         self.is_dirty = False
         
-    def parse_ans(self, ansi_str):
+    def parse_ans(self, ansi_bytes, wide_mode = False):
         """
         Parses an .ans files content. Assumes well-formed, breaks if not so.
   
@@ -340,16 +344,16 @@ class AnsiImage:
         current_bg_bright = False
         current_fg = 7
         current_bg = 0
-        while char_idx < len(ansi_str) and ansi_str[char_idx] != '\x1a':
+        while char_idx < len(ansi_bytes) and ansi_bytes[char_idx] != 0x1A:
             # Begin ansi escape
-            if ansi_str[char_idx] == "\x1b":
+            if ansi_bytes[char_idx] == 0x1B:
                 char_idx += 2 
                 escape_param_str = ""
                 escape_char = ""
-                while not (ansi_str[char_idx] == 'm' or ansi_str[char_idx] == 'C'):
-                    escape_param_str += ansi_str[char_idx]
+                while not (ansi_bytes[char_idx] == ord('m') or ansi_bytes[char_idx] == ord('C')):
+                    escape_param_str += chr(ansi_bytes[char_idx])
                     char_idx += 1
-                escape_char = ansi_str[char_idx]
+                escape_char = chr(ansi_bytes[char_idx])
                 escape_params = list(map(int, escape_param_str.split(";")))
                 
                 # SGR
@@ -387,7 +391,7 @@ class AnsiImage:
                 continue
                 
             # End of line
-            if ansi_str[char_idx] == '\n':
+            if ansi_bytes[char_idx] == 10:
                 ansi_lines.append(ansi_line)
                 ansi_line = []
                 char_idx += 1
@@ -395,12 +399,21 @@ class AnsiImage:
             
             # Normal character
             ansi_line.append(self.generate_ansi_char(
-                ansi_str[char_idx], 
+                ansi_bytes[char_idx], 
                 current_fg_bright, 
                 current_bg_bright, 
                 current_fg, 
-                current_bg
+                current_bg,
+                raw = True
             ))
+            
+            # If not wide mode and we're at 80 characters, break up the line
+            if not wide_mode and len(ansi_line) == 80:
+                ansi_lines.append(ansi_line)
+                ansi_line = []
+                char_idx += 1
+                continue
+            
             char_idx += 1
         if len(ansi_line) != 0:
             ansi_lines.append(ansi_line)
@@ -419,37 +432,48 @@ class AnsiImage:
         self.width = len(ansi_lines[0])
         self.height = len(ansi_lines)
     
+    def str_to_bytes(self, string):
+        """
+        Basic string to list of bytes function. Valid only for printable < 128.
+        """
+        byte_list = []
+        for char in string:
+            byte_list.append(ord(char))
+        return byte_list
+    
     def to_ans(self):
         """
-        Returns a textual ansi representation of the image.
+        Returns a byte-array text representation of the image.
         
         No effort is made to reduce size at this time.
         """
-        ansi_str = ""
+        ansi_bytes = []
         for y in range(0, self.height):
             for x in range(0, self.width):
                 char_info = self.ansi_image[y][x]
             
-                ansi_str += "\x1b[0;"
+                ansi_bytes += [0x1b] 
+                ansi_bytes += self.str_to_bytes('[0;')
                     
                 if char_info[1] >= 8:
-                    ansi_str += "1;"
-                ansi_str += str((char_info[1] % 8) + 30) + ";"
+                    ansi_bytes += self.str_to_bytes('1;')
+                ansi_bytes += self.str_to_bytes(str((char_info[1] % 8) + 30) + ";")
                 
                 if char_info[2] >= 8:
-                    ansi_str += "5;"
-                ansi_str += str((char_info[2] % 8) + 40)
+                    ansi_bytes += self.str_to_bytes("5;")
+                ansi_bytes += self.str_to_bytes(str((char_info[2] % 8) + 40))
                 
-                ansi_str += "m"
-                ansi_str += chr(char_info[0])
-            ansi_str += "\n"
-        return ansi_str
+                ansi_bytes += self.str_to_bytes("m")
+                ansi_bytes += [char_info[0]]
+            if self.width < 80: # If we're at 80 characters we omit the newline.
+                ansi_bytes += [10]
+        return bytearray(ansi_bytes)
     
     def save_ans(self, out_path):
         """
         Writes .ans file from this images contents
         """
-        with open(out_path, "w", encoding='cp1252') as f:
+        with open(out_path, "wb") as f:
             f.write(self.to_ans())
     
     def to_bitmap(self, ansi_graphics, transparent = False, cursor = False):

@@ -14,6 +14,7 @@ class AnsiPalette:
         self.cur_back = 0 # Black
         self.char_idx = 0
         self.chars = [176, 177, 178, 219, 223, 220, 221, 222, 254, 249, 32, 32] # Pablodraw default
+        self.invalid = [0, 8, 9, 10, 13, 26, 27, 255] # These will break acidview
         
     def set_fore(self, fore):
         """
@@ -63,9 +64,12 @@ class AnsiPalette:
         """
         if idx == None:
             idx = self.char_idx
+            
         if from_seq == True:
             return [self.chars[idx], self.fore(), self.back()]
         else:
+            if idx in self.invalid:
+                idx = ord(' ')
             return [idx, self.fore(), self.back()]
     
     def get_char_image(self, idx = None, from_seq = False):
@@ -127,9 +131,11 @@ class AnsiPalette:
         char_idx = 0
         for y in range(0, height):
             for x in range(0, width):
-                if char_idx < 256:
+                if char_idx < 256 and not char_idx in self.invalid:
                     sel_image.set_cell(char = char_idx, fore = fore, back = back, x = x, y = y)
-                    char_idx += 1
+                else:
+                    sel_image.set_cell(char = ord(' '), fore = fore, back = back, x = x, y = y)
+                char_idx += 1
                     
         sel_image.move_cursor(self.char_idx % width, self.char_idx // width, False)
         return sel_image.to_bitmap(self.graphics, cursor = True, transparent = True)

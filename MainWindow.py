@@ -501,7 +501,8 @@ class MainWindow(QtWidgets.QMainWindow):
         Create blank 80x24 document
         """
         self.ansiImage = AnsiImage()
-        self.ansiImage.clear_image(80, 24)
+        self.ansiImage.clear_image(80, 256)
+            
         self.undoStack = []
         self.redoStack = []
         self.currentFileName = None
@@ -512,17 +513,30 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Load an ansi file
         """
-        self.currentFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open ANSI file", filter="ANSI Files (*.ans)")[0]
-        self.ansiImage.load_ans(self.currentFileName)
-        self.redisplayAnsi()
-        self.updateTitle()
+        loadFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open ANSI file", filter="ANSI Files (*.ans);;Arbitrary width ANSI Files (*.ans);;All Files (*.*)")
+        wideMode = False
+        if loadFileName[1] == 'Arbitrary width ANSI Files (*.ans)':
+            wideMode = True
+        loadFileName = loadFileName[0]
+        
+        if len(loadFileName) != 0:
+            self.currentFileName = loadFileName
+            self.ansiImage.load_ans(self.currentFileName, wideMode)
+            self.redisplayAnsi()
+            self.updateTitle()
         
     def saveFileAs(self):
         """
         Save an ansi file, with a certain name
         """
-        self.currentFileName = QtWidgets.QFileDialog.getSaveFileName(self, caption = "Save ANSI file", filter="ANSI Files (*.ans)")[0]
-        self.saveFile()
+        saveFileName = QtWidgets.QFileDialog.getSaveFileName(self, caption = "Save ANSI file", filter="ANSI Files (*.ans);;All Files (*.*)")
+        if saveFileName[1] == 'ANSI Files (*.ans)' and not saveFileName[0].endswith(".ans"):
+            saveFileName = saveFileName[0] + ".ans" 
+        else:
+            saveFileName = saveFileName[0]
+        if len(saveFileName) != 0:
+            self.currentFileName = saveFileName
+            self.saveFile()
     
     def saveFile(self):
         """
