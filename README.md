@@ -21,6 +21,10 @@ Basic controls:
     * del while there is a selection deletes contents of selection
   * ctrl+z/ctrl+y undo/redo
   
+Issues:
+ * Some actions (ins/del mostly) can't be un/redone
+ * It's not very good yet
+ 
 The Ansi(Whatever).py files can be used without Qt or any gui stuff whatsoever to read, write, manipulate and render .ans files.
 
 Requires Numpy, PIL, PyQt5. Works on Linux and Windows.
