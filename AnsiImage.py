@@ -144,6 +144,53 @@ class AnsiImage:
         self.is_dirty = True
         return inverse
     
+    def fill_selection(self, fill_char = None):
+        """
+        Fills the selection with a given character (default: space)
+        
+        If no selection, cursor is used.
+        """
+        if fill_char == None:
+            fill_char = self.generate_ansi_char(' ', False, False, 0, 0)
+            
+            
+        selection = self.selection
+        if selection == None or len(selection) == 0:
+            selection = [(self.cursor_x, self.cursor_y)]
+            
+        for x, y in selection:
+            self.ansi_image[y][x] = copy.deepcopy(fill_char)
+        
+    def shift_line(self, y = None, x = None, how_much = 1, fill_char = None):
+        """
+        Shifts a line to the left or right (starting at the given x),
+        filling the holes with the given character (default: cursor, space).
+        
+        how_much can be negative to shift to the left.
+        """
+        if x == None:
+            x = self.cursor_x
+        
+        if y == None:
+            y = self.cursor_y
+        
+        if fill_char == None:
+            fill_char = self.generate_ansi_char(' ', False, False, 0, 0)
+            
+        if how_much > 0:
+            new_line = self.ansi_image[y][:x]
+            for i in range(how_much):
+                new_line.append(copy.deepcopy(fill_char))
+            new_line += self.ansi_image[y][x:]
+            self.ansi_image[y] = new_line[:self.width]
+        
+        if how_much < 0:
+            new_line = self.ansi_image[y][:x]
+            new_line += self.ansi_image[y][x - how_much:]
+            for i in range(-how_much):
+                new_line.append(copy.deepcopy(fill_char))
+            self.ansi_image[y] = new_line[:self.width]
+            
     def generate_ansi_char(self, in_char, fg_bright, bg_bright, fg, bg):
         """
         Generate ansi char as array: char idx, fg pal idx, bg pal idx
@@ -436,22 +483,23 @@ class AnsiImage:
                         ansi_bitmap[AnsiImage.CHAR_SIZE_Y * y + cursor_pix_y, AnsiImage.CHAR_SIZE_X * x + cursor_pix_x, 3] = 1.0
         
         # Invert selection
-        full_selection = self.selection_preliminary
-        if self.selection != None:
-            full_selection = full_selection.union(self.selection)
-        full_selection = full_selection.difference(self.selection_preliminary_remove)
-        
-        if len(full_selection) != 0:
-            for x, y in full_selection:
-                ansi_bitmap[
-                    AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                    AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
-                    0:3
-                ] = 1.0 - ansi_bitmap[
-                    AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                    AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
-                    0:3
-                ]
+        if cursor == True:
+            full_selection = self.selection_preliminary
+            if self.selection != None:
+                full_selection = full_selection.union(self.selection)
+            full_selection = full_selection.difference(self.selection_preliminary_remove)
+            
+            if len(full_selection) != 0:
+                for x, y in full_selection:
+                    ansi_bitmap[
+                        AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
+                        AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                        0:3
+                    ] = 1.0 - ansi_bitmap[
+                        AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
+                        AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                        0:3
+                    ]
                         
         return Image.fromarray((ansi_bitmap * 255.0).astype('int8'), mode='RGBA')
     
