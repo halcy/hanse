@@ -263,10 +263,12 @@ class MainWindow(QtWidgets.QMainWindow):
             preliminary = not (event.button() == QtCore.Qt.LeftButton)
             append = (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier)
             remove = (event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier)
-            self.updateSelection(selEndX, selEndY, preliminary, append, remove)
             if selEndX == self.selStartX and selEndY == self.selStartY and not append:
+                self.updateSelection(selEndX, selEndY, preliminary, append, remove)
                 self.ansiImage.set_selection()
-                self.redisplayAnsi()                
+                self.redisplayAnsi()
+            else:
+                self.updateSelection(selEndX, selEndY, preliminary, append, remove)
                 
     def beginSelection(self, selStartX, selStartY, append, remove):
         if self.selStartX != None or self.selStartY != None:
