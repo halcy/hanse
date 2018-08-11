@@ -16,6 +16,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
 
+        self.refImage = QtGui.QPixmap()
+
         # Set up window properties
         self.title = "HANSE"
         self.setWindowTitle(self.title)
@@ -68,6 +70,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.toggleHideCursor = QtWidgets.QAction("Hide cursor and selection", self)
         self.toggleHideCursor.setCheckable(True)
         self.toggleHideCursor.setChecked(False)
+        self.actionReferenceImage = QtWidgets.QAction("Set reference image", self)
+        self.toggleReferenceImage = QtWidgets.QAction("Show reference image", self)
+        self.toggleReferenceImage.setCheckable(True)
+        self.toggleReferenceImage.setChecked(True)
+        self.toggleReferenceImageTop = QtWidgets.QAction("Reference image on top", self)
+        self.toggleReferenceImageTop.setCheckable(True)
+        self.toggleReferenceImageTop.setChecked(True)
         
         menuFile.addAction(self.actionNew)
         menuFile.addAction(self.actionOpen)
@@ -89,7 +98,26 @@ class MainWindow(QtWidgets.QMainWindow):
         
         menuView.addAction(self.toggleTransparent)
         menuView.addAction(self.toggleHideCursor)
+        menuView.addSeparator()
+        menuView.addAction(self.actionReferenceImage)
+        menuView.addAction(self.toggleReferenceImage)
+        menuView.addAction(self.toggleReferenceImageTop)
+        menuOpacity = menuView.addMenu("Reference opacity")
         
+        opacityActionGroup = QtWidgets.QActionGroup(self)
+        opacityActionGroup.setExclusive(True)
+        self.toggleOpacity = []
+        for i in range(1, 10):
+            opacityToggle = QtWidgets.QAction("0." + str(i), self)
+            opacityToggle.setCheckable(True)
+            if i == 3:
+                opacityToggle.setChecked(True)
+            else:
+                opacityToggle.setChecked(False)
+            opacityActionGroup.addAction(opacityToggle)
+            menuOpacity.addAction(opacityToggle)
+            self.toggleOpacity.append(opacityToggle)
+    
     def createComponents(self):
         """
         Create window components
@@ -201,6 +229,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.imageView.mousePressEvent = self.imageMousePress
         self.imageView.mouseMoveEvent = self.imageMouseMoveRelease
         self.imageView.mouseReleaseEvent = self.imageMouseMoveRelease
+        
+        self.actionReferenceImage.triggered.connect(self.loadReferenceImage)
+        self.toggleReferenceImage.triggered.connect(self.redisplayAnsi)
+        self.toggleReferenceImageTop.triggered.connect(self.redisplayAnsi)
+        for i in range(1, 10):
+            self.toggleOpacity[i - 1].triggered.connect(self.redisplayAnsi)
         
     def charSelMousePress(self, event):
         """
@@ -344,7 +378,31 @@ class MainWindow(QtWidgets.QMainWindow):
         cursor = not self.toggleHideCursor.isChecked()
         bitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor)
         qtBitmap = ImageQt.ImageQt(bitmap)
-        self.imageView.setPixmap(QtGui.QPixmap.fromImage(qtBitmap))
+        qtPixmap = QtGui.QPixmap.fromImage(qtBitmap)
+        
+        result = QtGui.QPixmap(qtPixmap.size());
+        result.fill(QtGui.QColor(0,0,0,0));
+        painter = QtGui.QPainter();
+        painter.begin(result);
+        
+        refOpacity = 0.0
+        for i in range(1, 10):
+            if self.toggleOpacity[i - 1].isChecked():
+                refOpacity = float(i) / 10.0
+        
+        if self.toggleReferenceImage.isChecked() == True and self.toggleReferenceImageTop.isChecked() == False:
+            painter.setOpacity(refOpacity);
+            painter.drawPixmap(0, 0, qtPixmap.width(), qtPixmap.height(), self.refImage)
+        
+        painter.drawPixmap(0, 0, qtPixmap);
+        
+        if self.toggleReferenceImage.isChecked() == True and self.toggleReferenceImageTop.isChecked() == True:
+            painter.setOpacity(refOpacity);
+            painter.drawPixmap(0, 0, qtPixmap.width(), qtPixmap.height(), self.refImage)
+            
+        painter.end();
+        
+        self.imageView.setPixmap(result)
         self.imageView.setMinimumSize(qtBitmap.width(), qtBitmap.height())
         self.imageView.setMaximumSize(qtBitmap.width(), qtBitmap.height())
         self.updateCursorPositionLabel()
@@ -655,4 +713,12 @@ class MainWindow(QtWidgets.QMainWindow):
         Just call the redisplay function - it knows what to do.
         """
         self.redisplayAnsi()
+    
+    def loadReferenceImage(self):
+        refFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open reference image", filter="Image Files (*.png)")[0]
+        try:
+            self.refImage.load(refFileName)
+            self.redisplayAnsi()
+        except:
+            pass
         
