@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
 import copy
+import time
 
 class AnsiImage:
     """
@@ -480,6 +481,51 @@ class AnsiImage:
             byte_list.append(ord(char))
         return byte_list
     
+    def add_sauce(self, title = "", author = "", group = ""):
+        """
+        Generate a SAUCE tag.
+        
+        Sauce tags look like:
+        struct SAUCE
+        {
+            char           ID[5]; // "SAUCE"
+            char           Version[2]; // "00"
+            char           Title[35]; // title
+            char           Author[20]; // author
+            char           Group[20]; // group
+            char           Date[8]; // "CCYYMMDD", e.g. "20130504"
+            unsigned long  FileSize; // in bytes, nil legal
+            unsigned char  DataType; // 1 for character-based
+            unsigned char  FileType; // 1 for ANSI
+            unsigned short TInfo1; // Character width: 8
+            unsigned short TInfo2; // Nb. of lines
+            unsigned short TInfo3; // 0
+            unsigned short TInfo4; // 0
+            unsigned char  Comments; // 0
+            unsigned char  TFlags; // 00010011 - square pixel aspect, 8 pixel font, iCE colours
+            char           TInfoS[22]; // Font name - "IBM VGA"
+        };
+        
+        Full reference: http://www.acid.org/info/sauce/sauce.htm bless ACiD for documenting this so well y'all people own
+        """
+        sauce_bytes = [0x1a]
+        sauce_bytes += self.str_to_bytes("SAUCE00")
+        sauce_bytes += self.str_to_bytes(title.ljust(35))
+        sauce_bytes += self.str_to_bytes(author.ljust(20))
+        sauce_bytes += self.str_to_bytes(group.ljust(20))
+        sauce_bytes += self.str_to_bytes(time.strftime("%Y%m%d"))
+        sauce_bytes += [0, 0, 0, 0] # TODO make an attempt to actually put the file size
+        sauce_bytes += [1]
+        sauce_bytes += [1]
+        sauce_bytes += [self.width, 0]
+        sauce_bytes += [self.height, 0] # TODO > 255
+        sauce_bytes += [0, 0]
+        sauce_bytes += [0, 0]
+        sauce_bytes += [0]
+        sauce_bytes += [0b00010011]
+        sauce_bytes += self.str_to_bytes("IBM VGA".ljust(22, '\0'))
+        return sauce_bytes
+    
     def to_ans(self):
         """
         Returns a byte-array text representation of the image.
@@ -506,6 +552,7 @@ class AnsiImage:
                 ansi_bytes += [char_info[0]]
             if self.width < 80: # If we're at 80 characters we omit the newline.
                 ansi_bytes += [10]
+        ansi_bytes += self.add_sauce()
         return bytearray(ansi_bytes)
     
     def save_ans(self, out_path):
