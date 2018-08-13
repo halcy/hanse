@@ -64,6 +64,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionCut = QtWidgets.QAction("Cut", self)
         self.actionPaste = QtWidgets.QAction("Paste", self)
         
+        self.actionWriteChar = QtWidgets.QAction("Write character", self)
+        self.actionWriteChar.setCheckable(True)
+        self.actionWriteChar.setChecked(True)
+        
+        self.actionWriteFore = QtWidgets.QAction("Write foreground", self)
+        self.actionWriteFore.setCheckable(True)
+        self.actionWriteFore.setChecked(True)
+        
+        self.actionWriteBack = QtWidgets.QAction("Write background", self)
+        self.actionWriteBack.setCheckable(True)
+        self.actionWriteBack.setChecked(True)
+        
         menuView = self.menuBar().addMenu("View")
         self.toggleTransparent = QtWidgets.QAction("Transparent", self)
         self.toggleTransparent.setCheckable(True)
@@ -96,6 +108,10 @@ class MainWindow(QtWidgets.QMainWindow):
         menuEdit.addAction(self.actionCopy)
         menuEdit.addAction(self.actionCut)
         menuEdit.addAction(self.actionPaste)
+        menuEdit.addSeparator()
+        menuEdit.addAction(self.actionWriteChar)
+        menuEdit.addAction(self.actionWriteFore)
+        menuEdit.addAction(self.actionWriteBack)
         
         menuView.addAction(self.toggleTransparent)
         menuView.addAction(self.toggleHideCursor)
@@ -228,6 +244,10 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.actionPaste.triggered.connect(self.clipboardPaste)
         self.actionPaste.setShortcut(QtGui.QKeySequence.Paste)
+        
+        self.actionWriteChar.triggered.connect(self.changeWriteStatus)
+        self.actionWriteFore.triggered.connect(self.changeWriteStatus)
+        self.actionWriteBack.triggered.connect(self.changeWriteStatus)
         
         self.toggleTransparent.triggered.connect(self.changeTransparent)
         self.toggleHideCursor.triggered.connect(self.changeHideCursor)
@@ -776,6 +796,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.redisplayAnsi()
         except:
             pass
+        
+        
+    def changeWriteStatus(self):
+        """
+        Change which channels we are writing to.
+        """
+        self.ansiImage.set_write_allowed(
+            self.actionWriteChar.isChecked(),
+            self.actionWriteFore.isChecked(),
+            self.actionWriteBack.isChecked()
+        )
         
     def resizeCanvas(self):
         """

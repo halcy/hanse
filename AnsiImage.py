@@ -315,6 +315,19 @@ class AnsiImage:
         
         return moved
     
+    def set_write_allowed(self, char = None, fore = None, back = None):
+        """
+        Set or unset write-allow flags for character, foreground or background
+        """
+        if char != None:
+            self.write_allowed[0] = char
+            
+        if fore != None:
+            self.write_allowed[1] = fore
+            
+        if back != None:
+            self.write_allowed[2] = back
+        
     def set_cell(self, char = None, fore = None, back = None, x = None, y = None, ignore_allowed = False):
         """
         Sets the values of a character cell to the given values. Only replaces 
@@ -331,15 +344,15 @@ class AnsiImage:
         
         if ignore_allowed == False and self.write_allowed[0] == False:
             char = None
-            prev_val[0] = None
+            prev_val[2][0] = None
             
         if ignore_allowed == False and self.write_allowed[1] == False:
-            char = None
-            prev_val[1] = None
+            fore = None
+            prev_val[2][1] = None
             
         if ignore_allowed == False and self.write_allowed[2] == False:
-            char = None
-            prev_val[2] = None
+            back = None
+            prev_val[2][2] = None
             
         if char != None:
             prev_val[2][0] = self.ansi_image[y][x][0]
