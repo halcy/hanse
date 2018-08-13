@@ -21,14 +21,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Set up window properties
         self.title = "HANSE"
         self.setWindowTitle(self.title)
-        self.resize(900, 600)
+        self.resize(970, 600)
 
         # Set up other stuff
         self.currentFileName = None
         self.pasteBuffer = None
         self.selStartX = None
         self.selStartY = None
-
+        self.previewBuffer = None
+        
         # Create and link up GUI components
         self.createMenuBar()
         self.createComponents()
@@ -122,6 +123,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Create window components
         """
+        self.previewScroll = QtWidgets.QScrollArea()
+        self.previewScroll.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.previewScroll.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+        
+        self.imagePreview = QtWidgets.QLabel()
+        self.imagePreview.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.imagePreview.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+        
         self.imageScroll = QtWidgets.QScrollArea()
         self.imageScroll.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.imageScroll.setAlignment(QtCore.Qt.AlignCenter)
@@ -167,6 +176,9 @@ class MainWindow(QtWidgets.QMainWindow):
         
         
         self.imageScroll.setWidget(self.imageView)
+        self.previewScroll.setWidget(self.imagePreview)
+        
+        layoutHorizontal.addWidget(self.previewScroll)
         layoutHorizontal.addWidget(self.imageScroll)
         layoutHorizontal.addLayout(sidebarLayout)
         
@@ -235,6 +247,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.toggleReferenceImageTop.triggered.connect(self.redisplayAnsi)
         for i in range(1, 10):
             self.toggleOpacity[i - 1].triggered.connect(self.redisplayAnsi)
+        
+        self.imageView.paintEvent = self.repaintImage
         
     def charSelMousePress(self, event):
         """
@@ -369,43 +383,78 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.cursorPositionLabel.setText("Cursor: ({0}, {1})".format(x, y))
         else:
             self.cursorPositionLabel.setText(text)
-            
-    def redisplayAnsi(self):
+        
+    def repaintImage(self, event):
         """
-        Redraws the ANSI label.
+        Repaint event - does a partial repaint of the image view label and preview label.
         """
+        repaintCoords = [
+            event.rect().x(), 
+            event.rect().y(), 
+            event.rect().x() + event.rect().width(), 
+            event.rect().y() + event.rect().height()
+        ]
+        
         transparent = self.toggleTransparent.isChecked()
         cursor = not self.toggleHideCursor.isChecked()
-        bitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor)
-        qtBitmap = ImageQt.ImageQt(bitmap)
-        qtPixmap = QtGui.QPixmap.fromImage(qtBitmap)
+        paint_x, paint_y, bitmap, size_x, size_y = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor, area = repaintCoords)
+        qtPixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(bitmap))
         
-        result = QtGui.QPixmap(qtPixmap.size());
-        result.fill(QtGui.QColor(0,0,0,0));
-        painter = QtGui.QPainter();
-        painter.begin(result);
+        painter = QtGui.QPainter(self.imageView)
         
         refOpacity = 0.0
         for i in range(1, 10):
             if self.toggleOpacity[i - 1].isChecked():
                 refOpacity = float(i) / 10.0
-        
+
         if self.toggleReferenceImage.isChecked() == True and self.toggleReferenceImageTop.isChecked() == False:
-            painter.setOpacity(refOpacity);
-            painter.drawPixmap(0, 0, qtPixmap.width(), qtPixmap.height(), self.refImage)
-        
-        painter.drawPixmap(0, 0, qtPixmap);
+            painter.setOpacity(refOpacity)
+            painter.drawPixmap(0, 0, size_x, size_y, self.refImage)
+            painter.setOpacity(1.0)
+            
+        painter.drawPixmap(paint_x, paint_y, qtPixmap)
         
         if self.toggleReferenceImage.isChecked() == True and self.toggleReferenceImageTop.isChecked() == True:
-            painter.setOpacity(refOpacity);
-            painter.drawPixmap(0, 0, qtPixmap.width(), qtPixmap.height(), self.refImage)
+            painter.setOpacity(refOpacity)
+            painter.drawPixmap(0, 0, size_x, size_y, self.refImage)
             
-        painter.end();
+        painter.end()
         
-        self.imageView.setPixmap(result)
-        self.imageView.setMinimumSize(qtBitmap.width(), qtBitmap.height())
-        self.imageView.setMaximumSize(qtBitmap.width(), qtBitmap.height())
+        preview_size_x = size_x // 8
+        preview_size_y = size_y // 8
+        if self.previewBuffer == None or self.previewBuffer.width() != preview_size_x or self.previewBuffer.height() != preview_size_y:
+            self.previewBuffer = QtGui.QPixmap(preview_size_x, preview_size_y)
+            previewBitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor)
+            previewPixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(previewBitmap))
+            preview_x = 0
+            preview_y = 0
+        else:
+            preview_x = paint_x // 8
+            preview_y = paint_y // 8
+            previewPixmap = qtPixmap
+            
+        previewPainter = QtGui.QPainter(self.previewBuffer)
+        previewPainter.drawPixmap(preview_x, preview_y, previewPixmap.width() // 8, previewPixmap.height() // 8, previewPixmap)
+        previewPainter.end()
+        
+        self.imagePreview.setPixmap(self.previewBuffer)
+        
+        self.imagePreview.setMinimumSize(size_x // 8, size_y // 8)
+        self.imagePreview.setMaximumSize(size_x // 8, size_y // 8)
+        
+        self.previewScroll.setMinimumSize(size_x // 8 + 45, 1)
+        self.previewScroll.setMaximumSize(size_x // 8, 90001)
+        
+        self.imageView.setMinimumSize(size_x, size_y)
+        self.imageView.setMaximumSize(size_x, size_y)
         self.updateCursorPositionLabel()
+        
+    def redisplayAnsi(self):
+        """
+        Redraws the ANSI label.
+        """
+        self.imageView.repaint()
+        self.imagePreview.repaint()
         
     def redisplayPalette(self):
         """
@@ -496,34 +545,42 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.key() == QtCore.Qt.Key_Insert:
             if (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier):
                 if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                    inverse = []
                     for col in range(self.ansiImage.get_size()[0]):
-                        self.ansiImage.shift_column(x = col)
+                        inverse.extend(self.ansiImage.shift_column(x = col))
+                    self.addUndo(inverse)
                 else:
-                    self.ansiImage.shift_column()
+                    self.addUndo(self.ansiImage.shift_column())
             else:
                 if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                    inverse = []
                     for line in range(self.ansiImage.get_size()[1]):
-                        self.ansiImage.shift_line(y = line)
+                        inverse.extend(self.ansiImage.shift_line(y = line))
+                    self.addUndo(inverse)
                 else:
-                    self.ansiImage.shift_line()
+                    self.addUndo(self.ansiImage.shift_line())
             handled = True
             
         if event.key() == QtCore.Qt.Key_Delete:
             if self.ansiImage.has_selection():
-                self.ansiImage.fill_selection()
+                self.addUndo(self.ansiImage.fill_selection())
             else:
                 if (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier):
                     if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                        inverse = []
                         for col in range(self.ansiImage.get_size()[0]):
-                            self.ansiImage.shift_column(x = col, how_much = -1)
+                            inverse.extend(self.ansiImage.shift_column(x = col, how_much = -1))
+                        self.addUndo(inverse)
                     else:
-                        self.ansiImage.shift_column(how_much = -1)
+                        self.addUndo(self.ansiImage.shift_column(how_much = -1))
                 else:
                     if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
+                        inverse = []
                         for line in range(self.ansiImage.get_size()[1]):
-                            self.ansiImage.shift_line(y = line, how_much = -1)
+                            inverse.extend(self.ansiImage.shift_line(y = line, how_much = -1))
+                        self.addUndo(inverse)
                     else:
-                        self.ansiImage.shift_line(how_much = -1)
+                        self.addUndo(self.ansiImage.shift_line(how_much = -1))
             handled = True
             
         # Backspace delete
@@ -586,6 +643,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.undoStack = []
         self.redoStack = []
         self.currentFileName = None
+        self.previewBuffer = None
+        
         self.redisplayAnsi()
         self.updateTitle()
         
@@ -601,7 +660,9 @@ class MainWindow(QtWidgets.QMainWindow):
         
         if len(loadFileName) != 0:
             self.currentFileName = loadFileName
-            self.ansiImage.load_ans(self.currentFileName, wideMode)
+            self.ansiImage.load_ans(self.currentFileName, wideMode)            
+            self.previewBuffer = None
+            
             self.redisplayAnsi()
             self.updateTitle()
         
@@ -654,7 +715,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Copy, then delete
         """
         self.clipboardCopy()
-        self.ansiImage.fill_selection()
+        self.addUndo(self.ansiImage.fill_selection())
         self.redisplayAnsi()
     
     def clipboardPaste(self):    
@@ -674,7 +735,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if sizeDialog.exec() == 1:
             new_width = sizeDialog.spinBoxWidth.value()
             new_height = sizeDialog.spinBoxHeight.value()
-            self.ansiImage.change_size(new_width, new_height)
+            self.addUndo((-1, self.ansiImage.change_size(new_width, new_height)))
             self.redisplayAnsi()
             
     def addUndo(self, operation):
@@ -690,7 +751,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if len(self.undoStack) != 0:
             undoAction = self.undoStack.pop()
-            self.redoStack.append(self.ansiImage.paste(undoAction, x = 0, y = 0))
+            if undoAction[0] == -1:
+                undoAction = undoAction[1]
+                self.redoStack.append((-1, self.ansiImage.change_size(undoAction[0], undoAction[1], undoAction[2])))
+            else:
+                self.redoStack.append(self.ansiImage.paste(undoAction, x = 0, y = 0))
             self.redisplayAnsi()
             
     def redo(self):
@@ -699,7 +764,11 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if len(self.redoStack) != 0:
             redoAction = self.redoStack.pop()
-            self.undoStack.append(self.ansiImage.paste(redoAction, x = 0, y = 0))
+            if redoAction[0] == -1:
+                redoAction = redoAction[1]
+                self.undoStack.append((-1, self.ansiImage.change_size(redoAction[0], redoAction[1], redoAction[2])))
+            else:
+                self.undoStack.append(self.ansiImage.paste(redoAction, x = 0, y = 0))
             self.redisplayAnsi()
 
     def changeTransparent(self):
