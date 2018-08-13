@@ -20,9 +20,13 @@ Basic controls:
     * ctrl+del/ins delete/insert in row direction, ctrl+shift+del/ins entire rows
     * del while there is a selection deletes contents of selection
   * ctrl+z/ctrl+y undo/redo
+
+Some neat features:
+  * Arbitrary-Shape selections
+  * Reference images
+  * Smart home/end
   
 Issues:
- * Some actions (ins/del mostly) can't be un/redone
  * It's not very good yet
  
 The Ansi(Whatever).py files can be used without Qt or any gui stuff whatsoever to read, write, manipulate and render .ans files.
