@@ -32,6 +32,7 @@ class AnsiImage:
         self.redraw_set = set()
         self.ansi_bitmap = None
         self.have_cache = False
+        self.cache_params = None
         
         # The cursor
         self.cursor_shape = []
@@ -642,13 +643,14 @@ class AnsiImage:
         Can be passed an area. If so, only character cells overlapping the requested area will be
         drawn. In this case the return value is a tuple of (real x start, real y start, bitmap image, actual size w, actual size h)
         """
-        if self.have_cache == False:
+        if self.have_cache == False or self.cache_params != [transparent, cursor]:
             self.ansi_bitmap = np.ones((AnsiImage.CHAR_SIZE_Y * self.height, AnsiImage.CHAR_SIZE_X * self.width, 4))
             for y in range(0, self.height):
                 for x in range(0, self.width):
                     self.redraw_set.add((x, y))
             self.have_cache = True
-            
+        self.cache_params = [transparent, cursor]
+        
         for (x, y) in self.redraw_set:
             if x >= self.width or y >= self.height:
                 continue
@@ -661,13 +663,19 @@ class AnsiImage:
                 0:3
             ] = char_col
             
-            # Make pixels transparent
+            # Make pixels transparent or no
             if transparent == True and char_info[0] == ord(' '):
                 self.ansi_bitmap[
                     AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
                     AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
                     3
                 ] = np.zeros((AnsiImage.CHAR_SIZE_Y, AnsiImage.CHAR_SIZE_X))
+            else:
+                self.ansi_bitmap[
+                    AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
+                    AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                    3
+                ] = np.ones((AnsiImage.CHAR_SIZE_Y, AnsiImage.CHAR_SIZE_X))
                 
             # Draw cursor on top
             if cursor == True and x == self.cursor_x and y == self.cursor_y:
