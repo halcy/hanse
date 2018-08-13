@@ -1,13 +1,14 @@
 import sys
 
 from PIL import ImageQt
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, Qt
 
 from AnsiGraphics import AnsiGraphics
 from AnsiImage import AnsiImage
 from AnsiPalette import AnsiPalette
 
 from SizeDialog import SizeDialog
+import json
 
 class MainWindow(QtWidgets.QMainWindow):
     """
@@ -25,7 +26,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set up other stuff
         self.currentFileName = None
-        self.pasteBuffer = None
         self.selStartX = None
         self.selStartY = None
         self.previewBuffer = None
@@ -708,8 +708,40 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Copy to (right now internal) clipboard
         """
-        self.pasteBuffer = self.ansiImage.get_selected()
-    
+        pasteBuffer = self.ansiImage.get_selected()
+        
+        # Text representation for external use
+        extent_x = 0
+        extent_y = 0
+        for (x, y, char) in pasteBuffer:
+            extent_x = max(extent_x, x)
+            extent_y = max(extent_y, y)
+            
+        stringData = []
+        for y in range(extent_y + 1):
+            lineData = []
+            for x in range(extent_x + 1):
+                lineData.append(" ")
+            stringData.append(lineData)
+            
+        for (x, y, char) in pasteBuffer:
+            #print(x, y, len(stringData), len(stringData[0]))
+            stringData[y][x] = char[0]
+        
+        stringRepresentation = ""
+        for y in range(extent_y):
+            stringRepresentation += bytes(stringData[y]).decode('cp866') + "\n"
+            
+        # Internal json representation
+        byteData = QtCore.QByteArray(json.dumps(pasteBuffer).encode('utf-8'))
+        mimeData = QtCore.QMimeData()
+        mimeData.setData('text/hansejson', byteData)
+        mimeData.setText(stringRepresentation)
+        
+        # All to clipboard
+        clipboard = Qt.QApplication.clipboard()
+        clipboard.setMimeData(mimeData)
+        
     def clipboardCut(self):
         """
         Copy, then delete
@@ -722,10 +754,29 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Paste at cursor
         """
-        if self.pasteBuffer != None:
-            self.addUndo(self.ansiImage.paste(self.pasteBuffer))
-            self.redisplayAnsi()
-    
+        clipboard = Qt.QApplication.clipboard()
+        mimeData = clipboard.mimeData()
+        
+        # This can fail in a myriad ways - if it does, that's fine.
+        try:
+            pasteBuffer = None
+            if mimeData.hasFormat('text/hansejson'):
+                pasteBuffer = json.loads(mimeData.data('text/hansejson').data().decode('utf-8'))
+            else:
+                if mimeData.hasText():
+                    pasteText = mimeData.text()
+                    lines = pasteText.split("\n")
+                    pasteBuffer = []
+                    for y, line in enumerate(lines):
+                        for x, char in enumerate(line):
+                            pasteBuffer.append((x, y, (char.encode('cp866')[0], self.palette.fore(), self.palette.back())))
+                
+            if pasteBuffer != None:
+                self.addUndo(self.ansiImage.paste(pasteBuffer))
+                self.redisplayAnsi()
+        except:
+            pass
+        
     def resizeCanvas(self):
         """
         Get size via dialog and resize
