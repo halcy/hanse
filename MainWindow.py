@@ -22,7 +22,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Set up window properties
         self.title = "HANSE"
         self.setWindowTitle(self.title)
-        self.resize(970, 600)
+        self.resize(1100, 600)
 
         # Set up other stuff
         self.currentFileName = None
@@ -30,20 +30,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selStartY = None
         self.previewBuffer = None
         
+        # Load font
+        self.ansiGraphics = AnsiGraphics("config/vga.fnt")
+        
+        # Set up palette
+        self.palette = AnsiPalette(self.ansiGraphics, "config/palettes.ans")        
+        
         # Create and link up GUI components
         self.createMenuBar()
         self.createComponents()
         self.createLayout()
         self.connectEvents()
         
-        # Load font
-        self.ansiGraphics = AnsiGraphics("fonts/vga.fnt")
-        
         # Set up image
         self.newFile()
         
-        # Set up palette
-        self.palette = AnsiPalette(self.ansiGraphics)
+        # Make sure everything looks proper
         self.redisplayPalette()
         
     def createMenuBar(self):
@@ -144,7 +146,60 @@ class MainWindow(QtWidgets.QMainWindow):
             opacityActionGroup.addAction(opacityToggle)
             menuOpacity.addAction(opacityToggle)
             self.toggleOpacity.append(opacityToggle)
+            
+        self.menuCharacterSelect = QtWidgets.QMenu()
+        self.actionsCharacterSelect = []
+        self.hoveredCharSel = None
+        
+        characterSelectActionGroup = QtWidgets.QActionGroup(self)
+        characterSelectActionGroup.setExclusive(True)
+        for i in range(self.palette.char_sequence_count()):
+            actionCharacterSelect = QtWidgets.QWidgetAction(self.menuCharacterSelect)
+            actionCharacterSelect.setCheckable(True)
+            if i == 5:
+                actionCharacterSelect.setChecked(True)
+            else:
+                actionCharacterSelect.setChecked(False)
+                
+            charImage = QtGui.QPixmap.fromImage(ImageQt.ImageQt(self.palette.get_char_sequence_image(i)))
+            charLabel = QtWidgets.QLabel()
+            charLabel.setPixmap(charImage)
+            charLabel.setMinimumSize(charLabel.pixmap().width() + 32, charLabel.pixmap().height() + 4)
+            charLabel.paintEvent = (lambda event, x  = charLabel, y = actionCharacterSelect: self.paintCharSelMenu(event, x, y))
+            charLabel.setMouseTracking(True)
+            charLabel.mouseMoveEvent = (lambda event, x = charLabel: self.menuMouseMoved(event, x))
+            actionCharacterSelect.setDefaultWidget(charLabel)
+            
+            self.menuCharacterSelect.addAction(actionCharacterSelect)
+            characterSelectActionGroup.addAction(actionCharacterSelect)
+            self.actionsCharacterSelect.append(actionCharacterSelect)
     
+    def menuMouseMoved(self, event, label):
+        """
+        Repaint all the labels when the mouse moves
+        not super efficient but w/e
+        """
+        self.hoveredCharSel = label
+        for action in self.actionsCharacterSelect:
+            action.defaultWidget().repaint()
+    
+    def paintCharSelMenu(self, event, label, action):
+        """
+        Super special "menu item with pixmap" repainter
+        """        
+        styleOptions = QtWidgets.QStyleOptionMenuItem()
+        self.menuCharacterSelect.initStyleOption(styleOptions, action)
+        if self.hoveredCharSel == label:
+            styleOptions.state = styleOptions.state | QtWidgets.QStyle.State_Selected
+        else:
+            styleOptions.state = styleOptions.state & ~QtWidgets.QStyle.State_Selected
+        styleOptions.rect = label.frameRect()
+        
+        painter = QtWidgets.QStylePainter(label)
+        painter.drawControl(QtWidgets.QStyle.CE_MenuItem, styleOptions)
+        painter.drawPixmap(30, 2, label.pixmap())
+        painter.end()
+
     def createComponents(self):
         """
         Create window components
@@ -184,9 +239,13 @@ class MainWindow(QtWidgets.QMainWindow):
             charPalPixmap.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
             self.charPalPixmaps.append(charPalPixmap)
         
+        self.buttonCharSelect = QtWidgets.QPushButton("▶")
+        self.buttonCharSelect.setMaximumSize(30, 99999)
+        
         self.cursorPositionLabel = QtWidgets.QLabel("Cursor: (0, 0)")
         self.cursorPositionLabel.setAlignment(QtCore.Qt.AlignRight)
         self.cursorPositionLabel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        
         
     def createLayout(self):
         """
@@ -213,6 +272,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for i in range(0, 12):
             charPalLayout.addWidget(self.charPalLabels[i])
             charPalLayout.addWidget(self.charPalPixmaps[i])
+        charPalLayout.addWidget(self.buttonCharSelect)
         charPalLayout.addWidget(self.cursorPositionLabel)
         
         mainLayout.addLayout(layoutHorizontal)
@@ -262,6 +322,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.toggleTransparent.triggered.connect(self.changeTransparent)
         self.toggleHideCursor.triggered.connect(self.changeHideCursor)
         
+        self.buttonCharSelect.clicked.connect(self.showCharSelect)
+        
         self.imageScroll.keyPressEvent = self.keyPressEvent
         self.imageScroll.keyReleaseEvent = self.keyReleaseEvent
         self.charSel.mousePressEvent = self.charSelMousePress
@@ -281,6 +343,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.imageView.paintEvent = self.repaintImage
         
         self.toggleSmallPreview.triggered.connect(self.redisplayAnsi)
+        
+        for action in self.actionsCharacterSelect:
+            action.triggered.connect(self.setCharSequence)
         
     def charSelMousePress(self, event):
         """
@@ -892,4 +957,22 @@ class MainWindow(QtWidgets.QMainWindow):
             self.redisplayAnsi()
         except:
             pass
+        
+    def showCharSelect(self):
+        """
+        Allow the user to select a new set of characters
+        """
+        self.hoveredCharSel = None
+        self.menuCharacterSelect.exec(QtGui.QCursor.pos())
+        
+    def setCharSequence(self):
+        """
+        Change the selected character sequence
+        """
+        idx = 0
+        for num, action in enumerate(self.actionsCharacterSelect):
+            if action.isChecked():
+                idx = num
+        self.palette.select_char_sequence(idx)
+        self.redisplayPalette()
         

@@ -5,7 +5,7 @@ class AnsiPalette:
     Manages a palette of coloured ansi characters
     """
     
-    def __init__(self, ansi_graphics):
+    def __init__(self, ansi_graphics, palette_file):
         """
         Just stores a graphics object to work with.
         """
@@ -13,8 +13,10 @@ class AnsiPalette:
         self.cur_fore = 15 # White
         self.cur_back = 0 # Black
         self.char_idx = 0
-        self.chars = [176, 177, 178, 219, 223, 220, 221, 222, 254, 249, 32, 32] # Pablodraw default
         self.invalid = [0, 8, 9, 10, 13, 26, 27, 255] # These will break acidview
+        self.char_palettes = AnsiImage(min_line_len = 12)
+        self.char_palettes.load_ans(palette_file)
+        self.select_char_sequence(5)
         
     def set_fore(self, fore):
         """
@@ -42,7 +44,7 @@ class AnsiPalette:
     
     def set_char_sequence(self, char_sequence):
         """
-        Sets the palette character sequence
+        Sets the palette character sequence directly
         """
         self.chars = char_sequence
         if len(self.chars) > 12:
@@ -50,7 +52,34 @@ class AnsiPalette:
             
         if self.char_idx >= len(char_sequence):
             self.char_idx = 0
-            
+    
+    def select_char_sequence(self, index):
+        """
+        Select a palette from the character palettes
+        """
+        new_palette = []
+        for x in range(0, 12):
+            char, _, _ = self.char_palettes.get_cell(x, index)
+            new_palette.append(char)
+        self.chars = new_palette
+    
+    def get_char_sequence_image(self, index):
+        """
+        Returns an image of one of the character sequences
+        """
+        char_image = AnsiImage()
+        char_image.clear_image(12, 1)
+        for i in range(12):
+            char, _, _ = self.char_palettes.get_cell(i, index)
+            char_image.set_cell(x = i, y = 0, char = char, back = self.cur_back, fore = self.cur_fore)
+        return char_image.to_bitmap(self.graphics)
+    
+    def char_sequence_count(self):
+        """
+        Return how many selectable character sequences exist
+        """
+        return self.char_palettes.get_size()[1]
+    
     def set_char_idx(self, char_idx):
         """
         Sets the current character index
