@@ -80,16 +80,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.toggleTransparent = QtWidgets.QAction("Transparent", self)
         self.toggleTransparent.setCheckable(True)
         self.toggleTransparent.setChecked(False)
+        
         self.toggleHideCursor = QtWidgets.QAction("Hide cursor and selection", self)
         self.toggleHideCursor.setCheckable(True)
         self.toggleHideCursor.setChecked(False)
+        
         self.actionReferenceImage = QtWidgets.QAction("Set reference image", self)
+        
         self.toggleReferenceImage = QtWidgets.QAction("Show reference image", self)
         self.toggleReferenceImage.setCheckable(True)
         self.toggleReferenceImage.setChecked(True)
+        
         self.toggleReferenceImageTop = QtWidgets.QAction("Reference image on top", self)
         self.toggleReferenceImageTop.setCheckable(True)
         self.toggleReferenceImageTop.setChecked(True)
+        
+        self.toggleSmallPreview = QtWidgets.QAction("Small preview", self)
+        self.toggleSmallPreview.setCheckable(True)
+        self.toggleSmallPreview.setChecked(False)
         
         menuFile.addAction(self.actionNew)
         menuFile.addAction(self.actionOpen)
@@ -120,6 +128,8 @@ class MainWindow(QtWidgets.QMainWindow):
         menuView.addAction(self.toggleReferenceImage)
         menuView.addAction(self.toggleReferenceImageTop)
         menuOpacity = menuView.addMenu("Reference opacity")
+        menuView.addSeparator()
+        menuView.addAction(self.toggleSmallPreview)
         
         opacityActionGroup = QtWidgets.QActionGroup(self)
         opacityActionGroup.setExclusive(True)
@@ -269,6 +279,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.toggleOpacity[i - 1].triggered.connect(self.redisplayAnsi)
         
         self.imageView.paintEvent = self.repaintImage
+        
+        self.toggleSmallPreview.triggered.connect(self.redisplayAnsi)
         
     def charSelMousePress(self, event):
         """
@@ -440,8 +452,12 @@ class MainWindow(QtWidgets.QMainWindow):
             
         painter.end()
         
-        preview_size_x = size_x // 8
-        preview_size_y = size_y // 8
+        previewScale = 4
+        if self.toggleSmallPreview.isChecked():
+            previewScale = 8
+            
+        preview_size_x = size_x // previewScale
+        preview_size_y = size_y // previewScale
         if self.previewBuffer == None or self.previewBuffer.width() != preview_size_x or self.previewBuffer.height() != preview_size_y:
             self.previewBuffer = QtGui.QPixmap(preview_size_x, preview_size_y)
             previewBitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor)
@@ -449,21 +465,22 @@ class MainWindow(QtWidgets.QMainWindow):
             preview_x = 0
             preview_y = 0
         else:
-            preview_x = paint_x // 8
-            preview_y = paint_y // 8
+            preview_x = paint_x // previewScale
+            preview_y = paint_y // previewScale
             previewPixmap = qtPixmap
-            
+        
+        previewPixmap = previewPixmap.scaled(previewPixmap.width() // previewScale, previewPixmap.height() // previewScale, transformMode = QtCore.Qt.SmoothTransformation)
         previewPainter = QtGui.QPainter(self.previewBuffer)
-        previewPainter.drawPixmap(preview_x, preview_y, previewPixmap.width() // 8, previewPixmap.height() // 8, previewPixmap)
+        previewPainter.drawPixmap(preview_x, preview_y, previewPixmap.width(), previewPixmap.height(), previewPixmap)
         previewPainter.end()
         
         self.imagePreview.setPixmap(self.previewBuffer)
         
-        self.imagePreview.setMinimumSize(size_x // 8, size_y // 8)
-        self.imagePreview.setMaximumSize(size_x // 8, size_y // 8)
+        self.imagePreview.setMinimumSize(size_x // previewScale, size_y // previewScale)
+        self.imagePreview.setMaximumSize(size_x // previewScale, size_y // previewScale)
         
-        self.previewScroll.setMinimumSize(size_x // 8 + 45, 1)
-        self.previewScroll.setMaximumSize(size_x // 8, 90001)
+        self.previewScroll.setMinimumSize(size_x // previewScale + 45, 1)
+        self.previewScroll.setMaximumSize(size_x // previewScale, 90001)
         
         self.imageView.setMinimumSize(size_x, size_y)
         self.imageView.setMaximumSize(size_x, size_y)
@@ -749,9 +766,12 @@ class MainWindow(QtWidgets.QMainWindow):
             stringData[y][x] = char[0]
         
         stringRepresentation = ""
-        for y in range(extent_y):
-            stringRepresentation += bytes(stringData[y]).decode('cp866') + "\n"
-            
+        try:
+            for y in range(extent_y):
+                stringRepresentation += bytes(stringData[y]).decode('cp866') + "\n"
+        except:
+            pass
+        
         # Internal json representation
         byteData = QtCore.QByteArray(json.dumps(pasteBuffer).encode('utf-8'))
         mimeData = QtCore.QMimeData()
