@@ -7,8 +7,12 @@ from AnsiGraphics import AnsiGraphics
 from AnsiImage import AnsiImage
 from AnsiPalette import AnsiPalette
 
+from ToolSelection import ToolSelection
+
 from SizeDialog import SizeDialog
+
 import json
+import os
 
 class MainWindow(QtWidgets.QMainWindow):
     """
@@ -26,15 +30,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set up other stuff
         self.currentFileName = None
-        self.selStartX = None
-        self.selStartY = None
         self.previewBuffer = None
         
         # Load font
-        self.ansiGraphics = AnsiGraphics("config/vga.fnt")
+        self.fonts = json.load(open(os.path.join('config', 'fonts.json'), 'r'))
+        
+        self.activeFont = 0
+        self.ansiGraphics = AnsiGraphics(
+            os.path.join('config', self.fonts[self.activeFont]['file']), 
+            self.fonts[self.activeFont]['width'],
+            self.fonts[self.activeFont]['height'],
+        )
         
         # Set up palette
-        self.palette = AnsiPalette(self.ansiGraphics, "config/palettes.ans")        
+        self.palette = AnsiPalette(self.ansiGraphics, os.path.join("config", "palettes.ans"))
         
         # Create and link up GUI components
         self.createMenuBar()
@@ -47,6 +56,14 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Make sure everything looks proper
         self.redisplayPalette()
+        
+        # Set up tools
+        self.tools = []
+        self.tools.append(ToolSelection(self, self.imageView, self.ansiImage))
+        self.tools[0].activate()
+        
+        # The selection tool is Special because you can use it using the keyboard
+        self.selectionTool = self.tools[0]
         
     def createMenuBar(self):
         menuFile = self.menuBar().addMenu("File")
@@ -66,17 +83,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionCut = QtWidgets.QAction("Cut", self)
         self.actionPaste = QtWidgets.QAction("Paste", self)
         
-        self.actionWriteChar = QtWidgets.QAction("Write character", self)
-        self.actionWriteChar.setCheckable(True)
-        self.actionWriteChar.setChecked(True)
+        self.toggleSkipSpace = QtWidgets.QAction("Skip space", self)
+        self.toggleSkipSpace.setCheckable(True)
+        self.toggleSkipSpace.setChecked(True)
         
-        self.actionWriteFore = QtWidgets.QAction("Write foreground", self)
-        self.actionWriteFore.setCheckable(True)
-        self.actionWriteFore.setChecked(True)
+        self.toggleWriteChar = QtWidgets.QAction("Write character", self)
+        self.toggleWriteChar.setCheckable(True)
+        self.toggleWriteChar.setChecked(True)
         
-        self.actionWriteBack = QtWidgets.QAction("Write background", self)
-        self.actionWriteBack.setCheckable(True)
-        self.actionWriteBack.setChecked(True)
+        self.toggleWriteFore = QtWidgets.QAction("Write foreground", self)
+        self.toggleWriteFore.setCheckable(True)
+        self.toggleWriteFore.setChecked(True)
+        
+        self.toggleWriteBack = QtWidgets.QAction("Write background", self)
+        self.toggleWriteBack.setCheckable(True)
+        self.toggleWriteBack.setChecked(True)
         
         menuView = self.menuBar().addMenu("View")
         self.toggleTransparent = QtWidgets.QAction("Transparent", self)
@@ -118,10 +139,12 @@ class MainWindow(QtWidgets.QMainWindow):
         menuEdit.addAction(self.actionCopy)
         menuEdit.addAction(self.actionCut)
         menuEdit.addAction(self.actionPaste)
+        menuEdit.addAction(self.toggleSkipSpace)
+        
         menuEdit.addSeparator()
-        menuEdit.addAction(self.actionWriteChar)
-        menuEdit.addAction(self.actionWriteFore)
-        menuEdit.addAction(self.actionWriteBack)
+        menuEdit.addAction(self.toggleWriteChar)
+        menuEdit.addAction(self.toggleWriteFore)
+        menuEdit.addAction(self.toggleWriteBack)
         
         menuView.addAction(self.toggleTransparent)
         menuView.addAction(self.toggleHideCursor)
@@ -132,6 +155,8 @@ class MainWindow(QtWidgets.QMainWindow):
         menuOpacity = menuView.addMenu("Reference opacity")
         menuView.addSeparator()
         menuView.addAction(self.toggleSmallPreview)
+        menuView.addSeparator()
+        menuFont = menuView.addMenu("Font")
         
         opacityActionGroup = QtWidgets.QActionGroup(self)
         opacityActionGroup.setExclusive(True)
@@ -146,6 +171,20 @@ class MainWindow(QtWidgets.QMainWindow):
             opacityActionGroup.addAction(opacityToggle)
             menuOpacity.addAction(opacityToggle)
             self.toggleOpacity.append(opacityToggle)
+        
+        fontActionGroup = QtWidgets.QActionGroup(self)
+        fontActionGroup.setExclusive(True)
+        self.toggleFont = []
+        for i in range(len(self.fonts)):
+            fontToggle = QtWidgets.QAction(self.fonts[i]["name"], self)
+            fontToggle.setCheckable(True)
+            if i == 0:
+                fontToggle.setChecked(True)
+            else:
+                fontToggle.setChecked(False)
+            fontActionGroup.addAction(fontToggle)
+            menuFont.addAction(fontToggle)
+            self.toggleFont.append(fontToggle)
             
         self.menuCharacterSelect = QtWidgets.QMenu()
         self.actionsCharacterSelect = []
@@ -242,6 +281,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.buttonCharSelect = QtWidgets.QPushButton("▶")
         self.buttonCharSelect.setMaximumSize(30, 99999)
         
+        self.buttonCharSelectNext = QtWidgets.QPushButton("▼")
+        self.buttonCharSelectNext.setMaximumSize(30, 99999)
+        self.buttonCharSelectPrev = QtWidgets.QPushButton("▲")
+        self.buttonCharSelectPrev.setMaximumSize(30, 99999)
+        
         self.cursorPositionLabel = QtWidgets.QLabel("Cursor: (0, 0)")
         self.cursorPositionLabel.setAlignment(QtCore.Qt.AlignRight)
         self.cursorPositionLabel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
@@ -272,6 +316,9 @@ class MainWindow(QtWidgets.QMainWindow):
         for i in range(0, 12):
             charPalLayout.addWidget(self.charPalLabels[i])
             charPalLayout.addWidget(self.charPalPixmaps[i])
+        
+        charPalLayout.addWidget(self.buttonCharSelectPrev)
+        charPalLayout.addWidget(self.buttonCharSelectNext)
         charPalLayout.addWidget(self.buttonCharSelect)
         charPalLayout.addWidget(self.cursorPositionLabel)
         
@@ -315,14 +362,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionPaste.triggered.connect(self.clipboardPaste)
         self.actionPaste.setShortcut(QtGui.QKeySequence.Paste)
         
-        self.actionWriteChar.triggered.connect(self.changeWriteStatus)
-        self.actionWriteFore.triggered.connect(self.changeWriteStatus)
-        self.actionWriteBack.triggered.connect(self.changeWriteStatus)
+        self.toggleWriteChar.triggered.connect(self.changeWriteStatus)
+        self.toggleWriteFore.triggered.connect(self.changeWriteStatus)
+        self.toggleWriteBack.triggered.connect(self.changeWriteStatus)
         
         self.toggleTransparent.triggered.connect(self.changeTransparent)
         self.toggleHideCursor.triggered.connect(self.changeHideCursor)
         
         self.buttonCharSelect.clicked.connect(self.showCharSelect)
+        self.buttonCharSelectPrev.clicked.connect(lambda: (self.palette.select_char_sequence(-1, True), self.redisplayPalette()))        
+        self.buttonCharSelectNext.clicked.connect(lambda: (self.palette.select_char_sequence(1, True), self.redisplayPalette()))
         
         self.imageScroll.keyPressEvent = self.keyPressEvent
         self.imageScroll.keyReleaseEvent = self.keyReleaseEvent
@@ -330,15 +379,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.charSel.mouseDoubleClickEvent = self.charSelDoubleClick
         
         self.palSel.mousePressEvent = self.palSelMousePress
-        self.imageView.mousePressEvent = self.imageMousePress
-        self.imageView.mouseMoveEvent = self.imageMouseMoveRelease
-        self.imageView.mouseReleaseEvent = self.imageMouseMoveRelease
         
         self.actionReferenceImage.triggered.connect(self.loadReferenceImage)
         self.toggleReferenceImage.triggered.connect(self.redisplayAnsi)
         self.toggleReferenceImageTop.triggered.connect(self.redisplayAnsi)
         for i in range(1, 10):
             self.toggleOpacity[i - 1].triggered.connect(self.redisplayAnsi)
+        
+        for i in range(len(self.toggleFont)):
+            self.toggleFont[i].triggered.connect(self.changeFont)
         
         self.imageView.paintEvent = self.repaintImage
         
@@ -351,7 +400,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Mouse down on character selection
         """
-        new_idx = (event.y() // 16) * 16 + event.x() // 8
+        new_idx = (event.y() // self.ansiImage.get_char_size()[1]) * 16 + event.x() // self.ansiImage.get_char_size()[0]
         self.palette.set_char_idx(new_idx)
         self.redisplayPalette()
     
@@ -368,7 +417,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Mouse down on palette selection
         """
-        new_idx = (event.y() // 16) * 8 + event.x() // 16
+        new_idx = (event.y() // self.ansiImage.get_char_size()[1]) * 8 + event.x() // self.ansiImage.get_char_size()[1]
         
         if event.button() == QtCore.Qt.LeftButton:
             self.palette.set_fore(new_idx)
@@ -377,98 +426,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.palette.set_back(new_idx)
             
         self.redisplayPalette()
-    
-    def imageMousePress(self, event):
-        """
-        Mouse down on image
-        """
-        if event.button() == QtCore.Qt.LeftButton:
-            selStartX = event.x() // 8
-            selStartY = event.y() // 16
-            append = event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier
-            remove = event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier
-            self.ansiImage.move_cursor(selStartX, selStartY, False)
-            self.beginSelection(selStartX, selStartY, append, remove)
-            
-        if event.button() == QtCore.Qt.RightButton:
-            new_pal_char = self.ansiImage.get_cell(event.x() // 8, event.y() // 16)
-            self.palette.set_char_idx(new_pal_char[0])
-            self.palette.set_fore(new_pal_char[1])
-            self.palette.set_back(new_pal_char[2])
-            self.redisplayPalette()
-            
-    def imageMouseMoveRelease(self, event):
-        """
-        Changes or commits selection
-        """
-        if event.buttons() == QtCore.Qt.LeftButton or event.button() == QtCore.Qt.LeftButton:
-            selEndX = event.x() // 8
-            selEndY = event.y() // 16
-            
-            preliminary = not (event.button() == QtCore.Qt.LeftButton)
-            append = (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier)
-            remove = (event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier)
-            if selEndX == self.selStartX and selEndY == self.selStartY and not append:
-                self.updateSelection(selEndX, selEndY, preliminary, append, remove)
-                self.ansiImage.set_selection()
-                self.redisplayAnsi()
-            else:
-                self.updateSelection(selEndX, selEndY, preliminary, append, remove)
-                
-    def beginSelection(self, selStartX, selStartY, append, remove):
-        if self.selStartX != None or self.selStartY != None:
-            return
-            
-        self.selStartX = selStartX
-        self.selStartY = selStartY
-        self.ansiImage.set_selection([(self.selStartX, self.selStartY)], append = append, remove = remove)
-        self.redisplayAnsi()
-    
-    def updateSelection(self, selEndX, selEndY, preliminary, append, remove):
-        """
-        Updates the ongoing selection process
-        """
-        selDirX = 1
-        if selEndX - self.selStartX < 0:
-            selDirX = -1
-            
-        selDirY = 1
-        if selEndY - self.selStartY < 0:
-            selDirY = -1
-
-        if selEndY - self.selStartY == 0 and selEndX - self.selStartX == 0:
-            selDirX = 1
-            selDirY = 1   
-            
-        if selEndX != self.selStartX or selEndY != self.selStartY:  
-            selection = []
-            for x in range(self.selStartX, selEndX + selDirX, selDirX):
-                for y in range(self.selStartY, selEndY + selDirY, selDirY):
-                    selection.append((x, y))
-            
-            
-            self.ansiImage.set_selection(selection, append = append, remove = remove, preliminary = preliminary)
-            self.redisplayAnsi()
-        else:
-            self.ansiImage.set_selection([(selEndX, selEndY)], append = append, remove = remove, preliminary = preliminary)
-            self.redisplayAnsi()
-            
-        if preliminary:
-            self.updateCursorPositionLabel("Selecting: ({0}, {1}) to ({2}, {3}) = {4} x {5}".format(
-                self.selStartX, 
-                self.selStartY,
-                selEndX,
-                selEndY,
-                abs(self.selStartX - selEndX - selDirX),
-                abs(self.selStartY - selEndY - selDirY)
-            ))
-        else:
-            self.selStartX = None
-            self.selStartY = None
-        
-        if selEndX == self.selStartX and selEndY == self.selStartY and not preliminary:
-            self.selStartX = None
-            self.selStartY = None
                 
     def updateCursorPositionLabel(self, text = None):
         """
@@ -476,7 +433,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         if text == None:
             x, y = self.ansiImage.get_cursor()
-            if self.selStartX == None and self.selStartY == None:
+            if self.selectionTool.selStartX == None and self.selectionTool.selStartY == None:
                 self.cursorPositionLabel.setText("Cursor: ({0}, {1})".format(x, y))
         else:
             self.cursorPositionLabel.setText(text)
@@ -494,7 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         transparent = self.toggleTransparent.isChecked()
         cursor = not self.toggleHideCursor.isChecked()
-        paint_x, paint_y, bitmap, size_x, size_y = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor, area = repaintCoords)
+        paint_x, paint_y, bitmap, size_x, size_y = self.ansiImage.to_bitmap(transparent = transparent, cursor = cursor, area = repaintCoords)
         qtPixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(bitmap))
         
         painter = QtGui.QPainter(self.imageView)
@@ -525,7 +482,7 @@ class MainWindow(QtWidgets.QMainWindow):
         preview_size_y = size_y // previewScale
         if self.previewBuffer == None or self.previewBuffer.width() != preview_size_x or self.previewBuffer.height() != preview_size_y:
             self.previewBuffer = QtGui.QPixmap(preview_size_x, preview_size_y)
-            previewBitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = transparent, cursor = cursor)
+            previewBitmap = self.ansiImage.to_bitmap(transparent = transparent, cursor = cursor)
             previewPixmap = QtGui.QPixmap.fromImage(ImageQt.ImageQt(previewBitmap))
             preview_x = 0
             preview_y = 0
@@ -584,28 +541,49 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         handled = False
         
-        # Selection start
         if event.key() in [QtCore.Qt.Key_Right, QtCore.Qt.Key_Left, QtCore.Qt.Key_Down, QtCore.Qt.Key_Up]:
+            # Selection start
             if (event.modifiers() & QtCore.Qt.ShiftModifier == QtCore.Qt.ShiftModifier):
                 selX, selY = self.ansiImage.get_cursor()
                 append = event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier
                 remove = event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier
-                self.beginSelection(selX, selY, append, remove)
-
+                self.selectionTool.beginSelection(selX, selY, append, remove)
+            else:
+                # Palette change
+                if event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier:
+                    if event.key() == QtCore.Qt.Key_Right:
+                        if event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier:
+                            self.palette.set_back(1, True)
+                        else:
+                            self.palette.set_fore(1, True)
+                            
+                    if event.key() == QtCore.Qt.Key_Left:
+                        if event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier:
+                            self.palette.set_back(-1, True)
+                        else:
+                            self.palette.set_fore(-1, True)
+                    
+                    if event.key() == QtCore.Qt.Key_Down:
+                        self.palette.select_char_sequence(1, True)
+                    if event.key() == QtCore.Qt.Key_Up:
+                        self.palette.select_char_sequence(-1, True)
+                    self.redisplayPalette()
+                    handled = True
+                    
         # Cursor move
-        if event.key() == QtCore.Qt.Key_Right:
+        if event.key() == QtCore.Qt.Key_Right and not handled:
             self.ansiImage.move_cursor(1, 0, True)
             handled = True
             
-        if event.key() == QtCore.Qt.Key_Left:
+        if event.key() == QtCore.Qt.Key_Left  and not handled:
             self.ansiImage.move_cursor(-1, 0, True)
             handled = True
             
-        if event.key() == QtCore.Qt.Key_Down:
+        if event.key() == QtCore.Qt.Key_Down  and not handled:
             self.ansiImage.move_cursor(0, 1, True)
             handled = True
             
-        if event.key() == QtCore.Qt.Key_Up:
+        if event.key() == QtCore.Qt.Key_Up  and not handled:
             self.ansiImage.move_cursor(0, -1, True)
             handle = True
         
@@ -615,7 +593,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 selX, selY = self.ansiImage.get_cursor()
                 append = event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier
                 remove = event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier
-                self.updateSelection(selX, selY, True, append, remove)
+                self.selectionTool.updateSelection(selX, selY, True, append, remove)
         
         # Enter key insertion
         if event.key() == QtCore.Qt.Key_Return:
@@ -717,11 +695,11 @@ class MainWindow(QtWidgets.QMainWindow):
         Global key input handler - key up edition
         """ 
         if event.key() == QtCore.Qt.Key_Shift:
-            if self.selStartX != None and self.selStartY != None:
+            if self.selectionTool.selStartX != None and self.selectionTool.selStartY != None:
                 selEndX, selEndY = self.ansiImage.get_cursor()
                 append = (event.modifiers() & QtCore.Qt.ControlModifier == QtCore.Qt.ControlModifier)
                 remove = (event.modifiers() & QtCore.Qt.AltModifier == QtCore.Qt.AltModifier)
-                self.updateSelection(selEndX, selEndY, False, append, remove)
+                self.selectionTool.updateSelection(selEndX, selEndY, False, append, remove)
 
     def updateTitle(self):
         """
@@ -739,7 +717,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Create blank 80x24 document
         """
-        self.ansiImage = AnsiImage()
+        self.ansiImage = AnsiImage(self.ansiGraphics)
         self.ansiImage.clear_image(80, 24)
             
         self.undoStack = []
@@ -797,7 +775,7 @@ class MainWindow(QtWidgets.QMainWindow):
         Export file as rendered PNG image
         """
         exportFileName = QtWidgets.QFileDialog.getSaveFileName(self, caption = "Export PNG", filter="PNG File (*.png)")[0]
-        bitmap = self.ansiImage.to_bitmap(self.ansiGraphics, transparent = False, cursor = False)
+        bitmap = self.ansiImage.to_bitmap(transparent = False, cursor = False)
         bitmap.save(exportFileName, "PNG")
         
     def exit(self):
@@ -810,7 +788,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Copy to (right now internal) clipboard
         """
-        pasteBuffer = self.ansiImage.get_selected()
+        pasteBuffer = self.ansiImage.get_selected(self.toggleSkipSpace.isChecked())
         
         # Text representation for external use
         extent_x = 0
@@ -888,9 +866,9 @@ class MainWindow(QtWidgets.QMainWindow):
         Change which channels we are writing to.
         """
         self.ansiImage.set_write_allowed(
-            self.actionWriteChar.isChecked(),
-            self.actionWriteFore.isChecked(),
-            self.actionWriteBack.isChecked()
+            self.toggleWriteChar.isChecked(),
+            self.toggleWriteFore.isChecked(),
+            self.toggleWriteBack.isChecked()
         )
         
     def resizeCanvas(self):
@@ -951,12 +929,35 @@ class MainWindow(QtWidgets.QMainWindow):
         self.redisplayAnsi()
     
     def loadReferenceImage(self):
+        """
+        Sets up a reference image
+        """
         refFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open reference image", filter="Image Files (*.png)")[0]
         try:
             self.refImage.load(refFileName)
             self.redisplayAnsi()
         except:
             pass
+    
+    def changeFont(self):
+        """
+        Change the font
+        """
+        for i in range(len(self.toggleFont)):
+            if self.toggleFont[i].isChecked():
+                self.activeFont = i
+            
+        self.ansiGraphics = AnsiGraphics(
+            os.path.join('config', self.fonts[self.activeFont]['file']), 
+            self.fonts[self.activeFont]['width'],
+            self.fonts[self.activeFont]['height'],
+        )
+        
+        self.palette.change_graphics(self.ansiGraphics)
+        self.ansiImage.change_graphics(self.ansiGraphics)
+        self.previewBuffer = None
+        self.redisplayAnsi()
+        self.redisplayPalette()
         
     def showCharSelect(self):
         """

@@ -1,0 +1,20 @@
+[
+    {
+        "name": "AcidView Win32 (cp866 8x16)",
+        "file": "cp866_8x16.fnt",
+        "width": 8,
+        "height": 16
+    },
+    {
+        "name": "STAR (cp437 8x12)",
+        "file": "cp437_8x12.png",
+        "width": 8,
+        "height": 12
+    },
+    {
+        "name": "STAR Wide (cp437 20x15)",
+        "file": "cp437_20x15.png",
+        "width": 20,
+        "height": 15
+    }
+]

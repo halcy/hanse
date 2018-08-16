@@ -7,11 +7,7 @@ class AnsiImage:
     """
     Manages a rectangular image made of ansi character cells
     """
-    
-    CHAR_SIZE_X = 8
-    CHAR_SIZE_Y = 16
-    
-    def __init__(self, min_line_len = None):
+    def __init__(self, graphics, min_line_len = None):
         """
         Optionally allows the specification of a minimum
         line length, used when loading
@@ -25,6 +21,10 @@ class AnsiImage:
         self.is_dirty = False
         self.write_allowed = [True, True, True]
         
+        self.ansi_graphics = graphics
+        self.char_size_x = self.ansi_graphics.get_char_size()[0]
+        self.char_size_y = self.ansi_graphics.get_char_size()[1]
+        
         # Selection related stuff
         self.selection = None
         self.selection_preliminary = set()
@@ -35,20 +35,40 @@ class AnsiImage:
         self.cache_params = None
         
         # The cursor
-        self.cursor_shape = []
-        for y in [0, 1, 14, 15]:
-            for x in range(0, 8):
-                self.cursor_shape.append((y, x))
-        for y in range(2, 14):
-            for x in [0, 1, 6, 7]:
-                self.cursor_shape.append((y, x))
-    
+        self.rebuild_cursor()
+        
     def get_size(self):
         """
         Return the current canvas size in characters
         """
         return (self.width, self.height)
     
+    def rebuild_cursor(self):
+        self.cursor_shape = []
+        for y in [0, 1, self.char_size_y - 2, self.char_size_y - 1]:
+            for x in range(0, self.char_size_x):
+                self.cursor_shape.append((y, x))
+        for y in range(2, self.char_size_y - 2):
+            for x in [0, 1, self.char_size_x - 2, self.char_size_x - 1]:
+                self.cursor_shape.append((y, x))
+        
+    
+    def get_char_size(self):
+        """
+        Return the character size, in pixels
+        """
+        return (self.char_size_x, self.char_size_y)
+    
+    def change_graphics(self, new_graphics):
+        """
+        Changes the graphics in use
+        """
+        self.ansi_graphics = new_graphics
+        self.char_size_x = self.ansi_graphics.get_char_size()[0]
+        self.char_size_y = self.ansi_graphics.get_char_size()[1]
+        self.have_cache = False
+        self.rebuild_cursor()
+        
     def change_size(self, new_width, new_height, new_state = None):
         """
         Make the image larger or smaller, retaining contents.
@@ -125,7 +145,7 @@ class AnsiImage:
             self.redraw_set.update(self.selection)
             self.selection = None
             
-    def get_selected(self, selection = None):
+    def get_selected(self, skip_space = False, selection = None):
         """
         Returns the selected characters, offset-augmnented
         """
@@ -140,7 +160,8 @@ class AnsiImage:
         for x, y in selection:
             min_x = min(x, min_x)
             min_y = min(y, min_y)
-            selected.append([x, y, self.ansi_image[y][x]])
+            if not skip_space or self.ansi_image[y][x][0] != ord(' '):
+                selected.append([x, y, self.ansi_image[y][x]])
         
         for sel_item in selected:
             sel_item[0] -= min_x
@@ -636,7 +657,7 @@ class AnsiImage:
         with open(out_path, "wb") as f:
             f.write(self.to_ans())
     
-    def to_bitmap(self, ansi_graphics, transparent = False, cursor = False, area = None):
+    def to_bitmap(self, transparent = False, cursor = False, area = None):
         """
         Returns pixel representation of this image as a PIL Image object
         
@@ -644,7 +665,7 @@ class AnsiImage:
         drawn. In this case the return value is a tuple of (real x start, real y start, bitmap image, actual size w, actual size h)
         """
         if self.have_cache == False or self.cache_params != [transparent, cursor]:
-            self.ansi_bitmap = np.ones((AnsiImage.CHAR_SIZE_Y * self.height, AnsiImage.CHAR_SIZE_X * self.width, 4))
+            self.ansi_bitmap = np.ones((self.char_size_y * self.height, self.char_size_x * self.width, 4))
             for y in range(0, self.height):
                 for x in range(0, self.width):
                     self.redraw_set.add((x, y))
@@ -656,33 +677,33 @@ class AnsiImage:
                 continue
             
             char_info = self.ansi_image[y][x]
-            char_col = ansi_graphics.coloured_char(char_info[0], char_info[1], char_info[2])
+            char_col = self.ansi_graphics.coloured_char(char_info[0], char_info[1], char_info[2])
             self.ansi_bitmap[
-                AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                self.char_size_y * y : self.char_size_y * (y + 1),
+                self.char_size_x * x : self.char_size_x * (x + 1),
                 0:3
             ] = char_col
             
             # Make pixels transparent or no
             if transparent == True and char_info[0] == ord(' '):
                 self.ansi_bitmap[
-                    AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                    AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                    self.char_size_y * y : self.char_size_y * (y + 1),
+                    self.char_size_x * x : self.char_size_x * (x + 1),
                     3
-                ] = np.zeros((AnsiImage.CHAR_SIZE_Y, AnsiImage.CHAR_SIZE_X))
+                ] = np.zeros((self.char_size_y, self.char_size_x))
             else:
                 self.ansi_bitmap[
-                    AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                    AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                    self.char_size_y * y : self.char_size_y * (y + 1),
+                    self.char_size_x * x : self.char_size_x * (x + 1),
                     3
-                ] = np.ones((AnsiImage.CHAR_SIZE_Y, AnsiImage.CHAR_SIZE_X))
+                ] = np.ones((self.char_size_y, self.char_size_x))
                 
             # Draw cursor on top
             if cursor == True and x == self.cursor_x and y == self.cursor_y:
                 for cursor_pix_y, cursor_pix_x in self.cursor_shape:
-                    self.ansi_bitmap[AnsiImage.CHAR_SIZE_Y * y + cursor_pix_y, AnsiImage.CHAR_SIZE_X * x + cursor_pix_x, 0:3] = \
-                        1.0 - self.ansi_bitmap[AnsiImage.CHAR_SIZE_Y * y + cursor_pix_y, AnsiImage.CHAR_SIZE_X * x + cursor_pix_x, 0:3]
-                    self.ansi_bitmap[AnsiImage.CHAR_SIZE_Y * y + cursor_pix_y, AnsiImage.CHAR_SIZE_X * x + cursor_pix_x, 3] = 1.0
+                    self.ansi_bitmap[self.char_size_y * y + cursor_pix_y, self.char_size_x * x + cursor_pix_x, 0:3] = \
+                        1.0 - self.ansi_bitmap[self.char_size_y * y + cursor_pix_y, self.char_size_x * x + cursor_pix_x, 0:3]
+                    self.ansi_bitmap[self.char_size_y * y + cursor_pix_y, self.char_size_x * x + cursor_pix_x, 3] = 1.0
         
         # Invert selection
         if cursor == True:
@@ -696,12 +717,12 @@ class AnsiImage:
                     if not (x, y) in self.redraw_set or x >= self.width or y >= self.height:
                         continue
                     self.ansi_bitmap[
-                        AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                        AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                        self.char_size_y * y : self.char_size_y * (y + 1),
+                        self.char_size_x * x : self.char_size_x * (x + 1),
                         0:3
                     ] = 1.0 - self.ansi_bitmap[
-                        AnsiImage.CHAR_SIZE_Y * y : AnsiImage.CHAR_SIZE_Y * (y + 1),
-                        AnsiImage.CHAR_SIZE_X * x : AnsiImage.CHAR_SIZE_X * (x + 1),
+                        self.char_size_y * y : self.char_size_y * (y + 1),
+                        self.char_size_x * x : self.char_size_x * (x + 1),
                         0:3
                     ]
                     
@@ -718,21 +739,21 @@ class AnsiImage:
         self.redraw_set = set()
         
         if area != None:
-            start_x = min(area[0] // self.CHAR_SIZE_X, redraw_start_x)
-            end_x = max((area[2] // self.CHAR_SIZE_X) + 1, redraw_end_y)
+            start_x = min(area[0] // self.char_size_x, redraw_start_x)
+            end_x = max((area[2] // self.char_size_x) + 1, redraw_end_y)
             
-            start_y = min(area[1] // self.CHAR_SIZE_Y, redraw_start_y)
-            end_y = max((area[3] // self.CHAR_SIZE_Y) + 1, redraw_end_y)
+            start_y = min(area[1] // self.char_size_y, redraw_start_y)
+            end_y = max((area[3] // self.char_size_y) + 1, redraw_end_y)
             
             return (
-                start_x * AnsiImage.CHAR_SIZE_X, 
-                start_y * AnsiImage.CHAR_SIZE_Y, 
+                start_x * self.char_size_x, 
+                start_y * self.char_size_y, 
                 Image.fromarray((self.ansi_bitmap[
-                    start_y * AnsiImage.CHAR_SIZE_Y : end_y * AnsiImage.CHAR_SIZE_Y,
-                    start_x * AnsiImage.CHAR_SIZE_X : end_x * AnsiImage.CHAR_SIZE_X
+                    start_y * self.char_size_y : end_y * self.char_size_y,
+                    start_x * self.char_size_x : end_x * self.char_size_x
                 ] * 255.0).astype('int8'), mode='RGBA'),
-                AnsiImage.CHAR_SIZE_X * self.width,
-                AnsiImage.CHAR_SIZE_Y * self.height,
+                self.char_size_x * self.width,
+                self.char_size_y * self.height,
             )
         else:
             return Image.fromarray((self.ansi_bitmap * 255.0).astype('int8'), mode='RGBA')
