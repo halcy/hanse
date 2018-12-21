@@ -100,7 +100,7 @@ class AnsiGraphics:
         """
         Returns the VGA palette colour with the given index as an RGP triplet.
         """
-        return AnsiGraphics.CGA_PAL[idx]
+        return AnsiGraphics.CGA_PAL[pal_idx]
     
     def char_bitmap(self, char_idx):
         """

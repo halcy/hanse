@@ -740,7 +740,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         if len(loadFileName) != 0:
             self.currentFileName = loadFileName
-            self.ansiImage.load_ans(self.currentFileName, wideMode)            
+            self.ansiImage.load_ans(self.currentFileName, wideMode)
             self.previewBuffer = None
             
             self.redisplayAnsi()
@@ -932,7 +932,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Sets up a reference image
         """
-        refFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open reference image", filter="Image Files (*.png)")[0]
+        refFileName = QtWidgets.QFileDialog.getOpenFileName(self, caption = "Open reference image", filter="Image Files (*.png *.jpg)")[0]
         try:
             self.refImage.load(refFileName)
             self.redisplayAnsi()
