@@ -475,17 +475,20 @@ class AnsiImage:
         current_bg_bright = False
         current_fg = 7
         current_bg = 0
+        supported_controls = [ord('m'), ord('C'), ord('A'), ord('J'), ord('s'), ord('u'), ord('H')]
         while char_idx < len(ansi_bytes) and ansi_bytes[char_idx] != 0x1A:
             # Begin ansi escape
             if ansi_bytes[char_idx] == 0x1B:
                 char_idx += 2 
                 escape_param_str = ""
                 escape_char = ""
-                while not (ansi_bytes[char_idx] == ord('m') or ansi_bytes[char_idx] == ord('C')):
+                while not ansi_bytes[char_idx] in supported_controls:
                     escape_param_str += chr(ansi_bytes[char_idx])
                     char_idx += 1
                 escape_char = chr(ansi_bytes[char_idx])
-                escape_params = list(map(int, escape_param_str.split(";")))
+                escape_params = []
+                if len(escape_param_str):
+                    escape_params = list(map(int, escape_param_str.split(";")))
                 
                 # SGR
                 if escape_char == 'm':
@@ -509,6 +512,8 @@ class AnsiImage:
                             current_bg = param - 40
                 # CUF
                 if escape_char == 'C':
+                    if len(escape_params) == 0:
+                        continue
                     for i in range(escape_params[0]):
                         ansi_line.append(self.generate_ansi_char(
                             ' ', 
