@@ -1,5 +1,6 @@
 <html>
 <head>
+<meta name="format-detection" content="telephone=no">
 <title>HANSEWeb - {{title}}</title>
 <style type="text/css">
 @font-face {
@@ -9,26 +10,41 @@
     font-style: normal;
 }
 
-body, pre, h1 {
-    line-height: 1;
+body, div, pre, h1, a, a:link, a:active {
+    font-size: 100%;
+    line-height: 1.0;
     font-family: 'cp866_8x16'; 
     font-weight: normal; 
     font-style: normal;
     letter-spacing: 0px;
     background: #000000;
     color: #FFFFFF;
+    font-smooth: never;
+    -webkit-font-smooth: none;
+    -moz-font-smooth: none;
+    -moz-osx-font-smooth: none;
+    filter: contrast(1);
+}
+h1 {
+    font-size: 40px;
+}
+img {
+    display: inline-block;
+    max-width: 128px;
+    max-height: 128px;
+    float: left;
 }
 {{styles}}
 </style>
 </head>
+<pre>
 <body>
 <div style="text-align: center">
-<pre>
 {{content|safe}}
-</pre>
 {% if show_dl %}
-<h1>{{ title }} - <a href="/image/{{ title }}">download png</a> -  <a href="/image/{{ title }}?transparent=True">with transparent bg</a></h1>
+<h1>{{ title }} - <a href="/image/{{ title }}">download png</a> - <a href="/image/{{ title }}?transparent=True">with transparent bg</a></h1>
 {% endif %}
 </div>
+</pre>
 </body>
 </html>

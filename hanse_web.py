@@ -1,6 +1,8 @@
 from flask import Flask, request, send_from_directory, render_template, send_file
 app = Flask(__name__, static_url_path='')
 
+base_path = "images/"
+
 import numpy as np
 from io import BytesIO
 import glob
@@ -13,7 +15,7 @@ ansi_graphics = AnsiGraphics('config/cp866_8x16.fnt', 8, 16)
 
 pal_styles = ""
 for i in range(16):
-    col = np.floor(np.array(ansi_graphics.cga_colour(i)) * 255.0)
+    col = np.array(np.floor(np.array(ansi_graphics.cga_colour(i)) * 255.0), 'int')
     pal_entry = ".fg" + str(i) + "{\n"
     pal_entry += "    color: rgb(" + str(col[0]) + ", " + str(col[1]) + ", " + str(col[2]) + ");\n"
     pal_entry += "}\n\n"
@@ -25,19 +27,34 @@ for i in range(16):
 
 @app.route('/')
 def file_list():
-    file_list = list(glob.glob('*.ans'))
+    file_list = list(glob.glob(base_path + '*.ans'))
     list_html = '<h1>Files</h1><div style="text-align: left; font-size: 28px; width: 600px;">'
     for ansi_file in file_list:
+        ansi_file = ansi_file[len(base_path):]
         list_html += '--> <a href="/view/' + ansi_file + '">' + ansi_file + '</a><br/>'
     list_html += "</div>"
     return(render_template("default.html", title="files", content=list_html))
-           
+
+@app.route('/gallery')
+def gallery():
+    file_list = list(glob.glob(base_path + '*.ans'))
+    list_html = '<h1>Gallery</h1><div style="text-align: left; font-size: 28px; width: 600px;">'
+    for ansi_file in file_list:
+        ansi_file = ansi_file[len(base_path):]
+        list_html += '<a href="/image/' + ansi_file + '"><img src="/image/' + ansi_file + '?thumb"></img></a><br/>'
+    list_html += "</div>"
+    return(render_template("default.html", title="files", content=list_html))
+
 @app.route('/view/<path:path>')
 def render_ansi(path):
+    wide_mode = False
+    if request.args.get('wide', False) != False:
+        wide_mode = True    
+        
     try:
         ansi_image = AnsiImage(ansi_graphics)
         ansi_image.clear_image(80, 24)
-        ansi_image.load_ans(path, False)
+        ansi_image.load_ans(base_path + path, wide_mode = wide_mode)
         width, height = ansi_image.get_size()
     except:
        return(render_template("default.html", title="Loading error, sorry."))
@@ -55,16 +72,26 @@ def render_ansi(path):
 @app.route('/image/<path:path>')
 def render_ansi_png(path):
     transparent = False
-    if request.args.get('transparent', False) != False:
+    wide_mode = False
+    thumb = False
+    
+    if request.args.get('transparent', None) != None:
         transparent = True
+    if request.args.get('wide', None) != None:
+        wide_mode = True    
+    if request.args.get('thumb', None) != None:
+        thumb = True    
+        
     try:
         ansi_image = AnsiImage(ansi_graphics)
-        ansi_image.clear_image(80, 24)
-        ansi_image.load_ans(path, False)
+        ansi_image.clear_image(1000, 1000)
+        ansi_image.load_ans(base_path + path, wide_mode = wide_mode)
         bitmap = ansi_image.to_bitmap(transparent = transparent)
     except:
        return(render_template("default.html", title="Loading error, sorry."))
    
+    if thumb == True:
+        bitmap.thumbnail((128, 128))
     img_io = BytesIO()
     bitmap.save(img_io, 'PNG')
     img_io.seek(0)
