@@ -1,11 +1,18 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+<meta charset="utf-8" />
 <meta name="format-detection" content="telephone=no">
-<title>HANSEWeb - {{title}}</title>
+{% if show_dl %}
+<meta property="og:title" content="{{title}} - HANSEWeb">
+<meta property="og:image" content="{{ request.url_root[5:] + app_root + url_for('render_ansi_png', path = title) }}?thumb">
+<meta name="twitter:card" content="summary_large_image">
+{% endif %}
+<title>{{title}} - HANSEWeb</title>
 <style type="text/css">
 @font-face {
     font-family: 'cp866_8x16';
-    src: url('/webfont/cp866_8x16.woff') format('woff');
+    src: url('{{ request.url_root[5:] + app_root }}/webfont/cp866_8x16.woff') format('woff');
     font-weight: normal;
     font-style: normal;
 }
@@ -23,7 +30,7 @@ body, div, pre, h1, a, a:link, a:active {
     -webkit-font-smooth: none;
     -moz-font-smooth: none;
     -moz-osx-font-smooth: none;
-    filter: contrast(1);
+    /*filter: contrast(1);*/
 }
 h1 {
     font-size: 40px;
@@ -41,7 +48,7 @@ h1 {
 <div style="text-align: center">
 {{content|safe}}
 {% if show_dl %}
-<h1>{{ title }} - <a href="/image/{{ title }}">download png</a> - <a href="/image/{{ title }}?transparent=True">with transparent bg</a></h1>
+<h1>{{ title }} - <a href="{{ request.url_root[5:] + app_root }}/image/{{ title }}">png</a> - <a href="{{ request.url_root[5:] + app_root }}/image/{{ title }}?transparent=True">transparent</a> - <a href="{{ request.url_root[5:] + app_root }}/ansi/{{ title }}">ansi</a></h1>
 {% endif %}
 </div>
 </pre>
