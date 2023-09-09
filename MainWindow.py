@@ -73,6 +73,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionSave = QtWidgets.QAction("Save", self)
         self.actionSaveAs = QtWidgets.QAction("Save As", self)
         self.actionExport = QtWidgets.QAction("Export as PNG", self)
+        self.actionDeiCE = QtWidgets.QAction("De-iCE", self)
         self.actionExit = QtWidgets.QAction("Exit", self)
         
         menuEdit = self.menuBar().addMenu("Edit")
@@ -128,6 +129,8 @@ class MainWindow(QtWidgets.QMainWindow):
         menuFile.addAction(self.actionSave)
         menuFile.addAction(self.actionSaveAs)
         menuFile.addAction(self.actionExport)
+        menuFile.addSeparator()
+        menuFile.addAction(self.actionDeiCE)
         menuFile.addSeparator()
         menuFile.addAction(self.actionExit)
         
@@ -341,6 +344,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionSave.setShortcut(QtGui.QKeySequence.Save)
         self.actionSaveAs.triggered.connect(self.saveFileAs)
         self.actionExport.triggered.connect(self.exportPNG)
+        self.actionDeiCE.triggered.connect(self.deiCE)
         
         self.actionExit.triggered.connect(self.exit)
         self.actionExit.setShortcut(QtGui.QKeySequence.Quit)
@@ -717,7 +721,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         Create blank 80x24 document
         """
-        self.ansiImage = AnsiImage(self.ansiGraphics)
+        self.ansiImage = AnsiImage(self.ansiGraphics, has_autosave=True)
         self.ansiImage.clear_image(80, 24)
             
         self.undoStack = []
@@ -777,6 +781,13 @@ class MainWindow(QtWidgets.QMainWindow):
         exportFileName = QtWidgets.QFileDialog.getSaveFileName(self, caption = "Export PNG", filter="PNG File (*.png)")[0]
         bitmap = self.ansiImage.to_bitmap(transparent = False, cursor = False)
         bitmap.save(exportFileName, "PNG")
+
+    def deiCE(self):
+        """
+        Remove iCE colors and replace them with closest non-iCE match assuming regular font
+        """
+        self.ansiImage.deice()
+        self.redisplayAnsi()
         
     def exit(self):
         """
@@ -888,33 +899,42 @@ class MainWindow(QtWidgets.QMainWindow):
         Add an undo step (and clean out the redo stack)
         """
         self.undoStack.append(operation)
+        self.ansiImage.do_autosave()
         self.redoStack = []
         
     def undo(self):
         """
         Undo last action
         """
-        if len(self.undoStack) != 0:
-            undoAction = self.undoStack.pop()
-            if undoAction[0] == -1:
-                undoAction = undoAction[1]
-                self.redoStack.append((-1, self.ansiImage.change_size(undoAction[0], undoAction[1], undoAction[2])))
-            else:
-                self.redoStack.append(self.ansiImage.paste(undoAction, x = 0, y = 0))
-            self.redisplayAnsi()
+        try:
+            if len(self.undoStack) != 0:
+                undoAction = self.undoStack.pop()
+                if undoAction[0] == -1:
+                    undoAction = undoAction[1]
+                    self.redoStack.append((-1, self.ansiImage.change_size(undoAction[0], undoAction[1], undoAction[2])))
+                else:
+                    self.redoStack.append(self.ansiImage.paste(undoAction, x = 0, y = 0))
+                self.redisplayAnsi()
+                self.ansiImage.do_autosave()
+        except:
+            pass
             
     def redo(self):
         """
         Undo last undo
         """
-        if len(self.redoStack) != 0:
-            redoAction = self.redoStack.pop()
-            if redoAction[0] == -1:
-                redoAction = redoAction[1]
-                self.undoStack.append((-1, self.ansiImage.change_size(redoAction[0], redoAction[1], redoAction[2])))
-            else:
-                self.undoStack.append(self.ansiImage.paste(redoAction, x = 0, y = 0))
-            self.redisplayAnsi()
+        try:
+            if len(self.redoStack) != 0:
+                redoAction = self.redoStack.pop()
+                if redoAction[0] == -1:
+                    redoAction = redoAction[1]
+                    self.undoStack.append((-1, self.ansiImage.change_size(redoAction[0], redoAction[1], redoAction[2])))
+                else:
+                    self.undoStack.append(self.ansiImage.paste(redoAction, x = 0, y = 0))
+                self.redisplayAnsi()
+                self.ansiImage.do_autosave()
+        except:
+            pass
 
     def changeTransparent(self):
         """

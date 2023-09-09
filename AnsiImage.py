@@ -2,12 +2,13 @@ import numpy as np
 from PIL import Image
 import copy
 import time
+import os
 
 class AnsiImage:
     """
     Manages a rectangular image made of ansi character cells
     """
-    def __init__(self, graphics, min_line_len = None):
+    def __init__(self, graphics, min_line_len = None, has_autosave=False):
         """
         Optionally allows the specification of a minimum
         line length, used when loading
@@ -20,6 +21,11 @@ class AnsiImage:
         self.cursor_y = 0
         self.is_dirty = False
         self.write_allowed = [True, True, True]
+        self.steps_since_autosave = 0
+        self.autosave_steps = 10
+        self.autosave_counter = 0
+        self.autosave_max = 25
+        self.has_autosave = has_autosave
         
         self.ansi_graphics = graphics
         self.char_size_x = self.ansi_graphics.get_char_size()[0]
@@ -457,6 +463,7 @@ class AnsiImage:
         with open(ansi_path, "rb") as f:
             ansi_data = f.read()
         self.parse_ans(ansi_data, wide_mode)
+        self.steps_since_autosave = 0
         self.is_dirty = False
         
     def parse_ans(self, ansi_bytes, wide_mode = False):
@@ -763,3 +770,60 @@ class AnsiImage:
         else:
             return Image.fromarray((self.ansi_bitmap * 255.0).astype('int8'), mode='RGBA')
     
+    def deice(self):
+        """
+        Try to remove iCE colors from the image using closest visual matches
+        and flipping fg/bg colors.
+        """
+        bg_color_conversion = [i if i < 8 else i % 8 for i in range(16)]
+
+        # A function to find the best matching non-iCE character
+        def find_best_char(in_char, fg, bg):
+            # An expanded lookup table for character replacements
+            char_conversion = {
+                32: 176,  # Space to light shade
+                176: 32,  # Light shade to space
+                177: 178, # Medium shade to dark shade
+                178: 177, # Dark shade to medium shade
+                219: 178, # Solid block to dark shade
+                220: 223, # Upper half block to lower half block
+                221: 222, # Right half block to left half block
+                222: 221, # Left half block to right half block
+                223: 220, # Lower half block to upper half block
+                254: 250, # Full block to small dot
+                249: 250, # Small dot to small dot
+            }
+
+            if bg > 7:
+                # Replace the character if necessary
+                if in_char in char_conversion:
+                    in_char = char_conversion[in_char]
+                    # Swap fg and bg colors when replacing the character
+                    fg, bg = bg, fg
+
+                # Replace the background color with the closest non-iCE color
+                bg = bg_color_conversion[bg]
+
+            return in_char, fg, bg
+
+        # Iterate through each pixel and replace iCE colors and characters
+        for x in range(self.width):
+            for y in range(self.height):
+                in_char, fg, bg = self.ansi_image[y][x]
+                self.ansi_image[y][x] = find_best_char(in_char, fg, bg)
+                self.redraw_set.add((x, y))
+        self.is_dirty = True
+
+    def do_autosave(self):
+        """
+        Autosave occassionally. Call when adding/removing undo/redo steps
+        """
+        if not os.path.exists("autosaves"):
+            os.mkdir("autosaves")
+        self.steps_since_autosave += 1
+        if self.steps_since_autosave >= self.autosave_steps:
+            self.autosave_counter += 1
+            if self.autosave_counter > self.autosave_max:
+                self.autosave_counter = 0
+            self.save_ans(f"autosaves/autosave_{self.autosave_counter}.ans")
+            self.steps_since_autosave = 0
